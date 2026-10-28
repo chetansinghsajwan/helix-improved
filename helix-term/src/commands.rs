@@ -2438,7 +2438,8 @@ fn make_search_word_bounded(cx: &mut Context) {
     }
 }
 
-fn global_search(cx: &mut Context) {
+#[allow(dead_code)] // helix's own implementation, replaced by the `pick` grep below
+fn global_search_builtin(cx: &mut Context) {
     #[derive(Debug)]
     struct FileResult {
         path: PathBuf,
@@ -3046,14 +3047,82 @@ fn append_mode(cx: &mut Context) {
     doc.set_selection(view.id, selection);
 }
 
+/// Open the files chosen in `pick` (paths relative to `root`): the first replaces
+/// the current view, the rest load as buffers.
+fn open_picked(cx: &mut compositor::Context, root: &std::path::Path, picked: Vec<String>) {
+    for (i, rela) in picked.iter().enumerate() {
+        let action = if i == 0 { Action::Replace } else { Action::Load };
+        if let Err(e) = cx.editor.open(&root.join(rela), action) {
+            cx.editor.set_error(format!("Failed to open {rela}: {e}"));
+        }
+    }
+}
+
+/// The file picker: the shared `pick` component instead of helix's own.
+fn pick_files(cx: &mut Context, root: PathBuf) {
+    use pick::{source, Mode, PickerOptions};
+    let opts = PickerOptions {
+        mode: Mode::Fuzzy,
+        paths: true,
+        root: root.clone(),
+        preview: true,
+        git: true,
+        query: String::new(),
+    };
+    let walk_root = root.clone();
+    let picker = ui::pick::PickComponent::new(
+        opts,
+        move |p| source::spawn_files(p.injector(), walk_root, false),
+        move |_compositor, cx, picked| open_picked(cx, &root, picked),
+    );
+    cx.push_layer(Box::new(picker));
+}
+
+/// Global search: `pick` in grep mode. Opens the match at its line and column.
+fn global_search(cx: &mut Context) {
+    use pick::{Mode, PickerOptions};
+    let root = find_workspace().0;
+    if !root.exists() {
+        cx.editor.set_error("Workspace directory does not exist");
+        return;
+    }
+    let opts = PickerOptions {
+        mode: Mode::Grep,
+        paths: true,
+        root: root.clone(),
+        preview: true,
+        git: true,
+        query: String::new(),
+    };
+    let picker = ui::pick::PickComponent::new(opts, |_| {}, move |_compositor, cx, picked| {
+        // `path:line:col:text`
+        let Some(first) = picked.first() else { return };
+        let mut parts = first.splitn(4, ':');
+        let (Some(path), Some(line), Some(col)) = (parts.next(), parts.next(), parts.next()) else {
+            return;
+        };
+        let (line, col): (usize, usize) = (line.parse().unwrap_or(1), col.parse().unwrap_or(1));
+        if let Err(e) = cx.editor.open(&root.join(path), Action::Replace) {
+            cx.editor.set_error(format!("Failed to open {path}: {e}"));
+            return;
+        }
+        let (view, doc) = current!(cx.editor);
+        let text = doc.text();
+        let line = line.saturating_sub(1).min(text.len_lines().saturating_sub(1));
+        let pos = (text.line_to_char(line) + col.saturating_sub(1)).min(text.len_chars());
+        doc.set_selection(view.id, Selection::point(pos));
+        align_view(doc, view, Align::Center);
+    });
+    cx.push_layer(Box::new(picker));
+}
+
 fn file_picker(cx: &mut Context) {
     let root = find_workspace().0;
     if !root.exists() {
         cx.editor.set_error("Workspace directory does not exist");
         return;
     }
-    let picker = ui::file_picker(cx.editor, root);
-    cx.push_layer(Box::new(overlaid(picker)));
+    pick_files(cx, root);
 }
 
 fn file_picker_in_current_buffer_directory(cx: &mut Context) {
@@ -3069,8 +3138,7 @@ fn file_picker_in_current_buffer_directory(cx: &mut Context) {
         }
     };
 
-    let picker = ui::file_picker(cx.editor, path);
-    cx.push_layer(Box::new(overlaid(picker)));
+    pick_files(cx, path);
 }
 
 fn file_picker_in_current_directory(cx: &mut Context) {
@@ -3080,8 +3148,7 @@ fn file_picker_in_current_directory(cx: &mut Context) {
             .set_error("Current working directory does not exist");
         return;
     }
-    let picker = ui::file_picker(cx.editor, cwd);
-    cx.push_layer(Box::new(overlaid(picker)));
+    pick_files(cx, cwd);
 }
 
 fn file_explorer(cx: &mut Context) {
