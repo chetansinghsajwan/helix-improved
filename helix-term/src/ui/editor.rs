@@ -624,13 +624,17 @@ impl EditorView {
         let scratch = PathBuf::from(SCRATCH_BUFFER_NAME);
         let current = view!(editor).doc;
         let mut active = 0;
+        let docs: Vec<_> = editor.documents().collect();
+        let paths: Vec<&std::path::Path> = docs.iter().map(|d| d.path().map(|p| p.as_path()).unwrap_or(&scratch)).collect();
+        // Equal file names get just enough parent folders to tell them apart.
+        let titles = tui_design::tabs::short_titles(&paths);
         let mut labels = Vec::new();
-        for (i, doc) in editor.documents().enumerate() {
+        for (i, doc) in docs.iter().enumerate() {
             let fname = doc.path().unwrap_or(&scratch).file_name().unwrap_or_default().to_str().unwrap_or_default();
             if doc.id() == current {
                 active = i;
             }
-            labels.push(tui_design::tabs::Label { title: fname.to_string(), modified: doc.is_modified(), icon: Some(tui_design::icons::file(fname, false)) });
+            labels.push(tui_design::tabs::Label { title: titles[i].clone(), modified: doc.is_modified(), icon: Some(tui_design::icons::file(fname, false)) });
         }
         let local = ratatui::layout::Rect::new(0, 0, viewport.width, 1);
         let mut buf = ratatui::buffer::Buffer::empty(local);
