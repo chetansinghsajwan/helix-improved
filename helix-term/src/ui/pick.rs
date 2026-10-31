@@ -47,6 +47,18 @@ impl PickComponent {
         self
     }
 
+    /// Pane title (`Commands`, ...).
+    pub fn with_title(mut self, title: &str) -> Self {
+        self.picker.set_title(title);
+        self
+    }
+
+    /// Fixed lines under the query (column labels).
+    pub fn with_header(mut self, lines: Vec<String>) -> Self {
+        self.picker.set_header(lines);
+        self
+    }
+
     /// Show the list as a directory hierarchy (files, grep results).
     pub fn with_tree(mut self, on: bool) -> Self {
         self.picker.set_tree(on);

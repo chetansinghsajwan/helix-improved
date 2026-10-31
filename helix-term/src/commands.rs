@@ -3617,84 +3617,107 @@ fn changed_file_picker(cx: &mut Context) {
     cx.push_layer(Box::new(overlaid(picker)));
 }
 
+/// Commands everyone knows (movement, mode switches, ...): kept out of the command palette.
+fn palette_basic(name: &str) -> bool {
+    const PREFIXES: &[&str] = &["move_", "extend_", "page_", "half_page_", "scroll_", "insert_char", "delete_char_", "kill_to_"];
+    const NAMES: &[&str] = &["normal_mode", "insert_mode", "select_mode", "no_op"];
+    PREFIXES.iter().any(|p| name.starts_with(p)) || NAMES.contains(&name)
+}
+
+/// The command palette: every command by name with its keys and description, in the shared
+/// `pick` (the same list design as the other tools).
 pub fn command_palette(cx: &mut Context) {
     let register = cx.register;
     let count = cx.count;
 
     cx.callback.push(Box::new(
         move |compositor: &mut Compositor, cx: &mut compositor::Context| {
-            let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()
-                [&cx.editor.mode]
-                .reverse_map();
+            let keymap = compositor.find::<ui::EditorView>().unwrap().keymaps.map()[&cx.editor.mode].reverse_map();
 
-            let commands = MappableCommand::STATIC_COMMAND_LIST.iter().cloned().chain(
-                typed::TYPABLE_COMMAND_LIST
-                    .iter()
-                    .map(|cmd| MappableCommand::Typable {
-                        name: cmd.name.to_owned(),
-                        args: String::new(),
-                        doc: cmd.doc.to_owned(),
-                    }),
-            );
+            let commands: Vec<MappableCommand> = MappableCommand::STATIC_COMMAND_LIST
+                .iter()
+                .cloned()
+                .chain(typed::TYPABLE_COMMAND_LIST.iter().map(|cmd| MappableCommand::Typable {
+                    name: cmd.name.to_owned(),
+                    args: String::new(),
+                    doc: cmd.doc.to_owned(),
+                }))
+                .filter(|c| !palette_basic(c.name()))
+                .collect();
 
-            let columns = [
-                ui::PickerColumn::new("name", |item, _| match item {
-                    MappableCommand::Typable { name, .. } => format!(":{name}").into(),
-                    MappableCommand::Static { name, .. } => (*name).into(),
-                    MappableCommand::Macro { .. } => {
-                        unreachable!("macros aren't included in the command palette")
+            let name_of = |c: &MappableCommand| match c {
+                MappableCommand::Typable { name, .. } => format!(":{name}"),
+                MappableCommand::Static { name, .. } => (*name).to_string(),
+                MappableCommand::Macro { .. } => unreachable!("macros aren't included in the command palette"),
+            };
+            let keys_of = |c: &MappableCommand| -> String {
+                keymap
+                    .get(c.name())
+                    .map(|bindings| {
+                        bindings
+                            .iter()
+                            .map(|bind| bind.iter().map(|key| key.key_sequence_format()).collect::<String>())
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .unwrap_or_default()
+            };
+            let rows: Vec<(String, String, String)> = commands.iter().map(|c| (name_of(c), keys_of(c), c.doc().lines().next().unwrap_or("").to_string())).collect();
+            let name_w = rows.iter().map(|r| r.0.chars().count()).max().unwrap_or(0).max("Command".len());
+            let keys_w = rows.iter().map(|r| r.1.chars().count()).max().unwrap_or(0).min(24).max("Keys".len());
+            let header = format!("{:<name_w$}  {:<keys_w$}  Description", "Command", "Keys");
+            let candidates: Vec<pick::Candidate> = rows
+                .iter()
+                .enumerate()
+                .map(|(i, (n, k, d))| pick::Candidate::with_raw(format!("{n:<name_w$}  {k:<keys_w$}  {d}"), i.to_string()))
+                .collect();
+
+            let opts = pick::PickerOptions {
+                mode: pick::Mode::Fuzzy,
+                paths: false,
+                root: find_workspace().0,
+                preview: false,
+                git: false,
+                query: String::new(),
+            };
+            let picker = ui::pick::PickComponent::new(
+                opts,
+                move |p| pick::source::push_candidates(&p.injector(), candidates),
+                move |compositor, cx, picked| {
+                    let Some(command) = picked.first().and_then(|i| i.parse::<usize>().ok()).and_then(|i| commands.get(i)) else {
+                        return;
+                    };
+                    let mut ctx = Context {
+                        register,
+                        count,
+                        editor: cx.editor,
+                        callback: Vec::new(),
+                        on_next_key_callback: None,
+                        jobs: cx.jobs,
+                    };
+                    let focus = view!(ctx.editor).id;
+                    command.execute(&mut ctx);
+                    let callbacks = std::mem::take(&mut ctx.callback);
+
+                    if ctx.editor.tree.contains(focus) {
+                        let config = ctx.editor.config();
+                        let mode = ctx.editor.mode();
+                        let view = view_mut!(ctx.editor, focus);
+                        let doc = doc_mut!(ctx.editor, &view.doc);
+                        view.ensure_cursor_in_view(doc, config.scrolloff);
+                        if mode != Mode::Insert {
+                            doc.append_changes_to_history(view);
+                        }
                     }
-                }),
-                ui::PickerColumn::new(
-                    "bindings",
-                    |item: &MappableCommand, keymap: &crate::keymap::ReverseKeymap| {
-                        keymap
-                            .get(item.name())
-                            .map(|bindings| {
-                                bindings.iter().fold(String::new(), |mut acc, bind| {
-                                    if !acc.is_empty() {
-                                        acc.push(' ');
-                                    }
-                                    for key in bind {
-                                        acc.push_str(&key.key_sequence_format());
-                                    }
-                                    acc
-                                })
-                            })
-                            .unwrap_or_default()
-                            .into()
-                    },
-                ),
-                ui::PickerColumn::new("doc", |item: &MappableCommand, _| item.doc().into()),
-            ];
-
-            let picker = Picker::new(columns, 0, commands, keymap, move |cx, command, _action| {
-                let mut ctx = Context {
-                    register,
-                    count,
-                    editor: cx.editor,
-                    callback: Vec::new(),
-                    on_next_key_callback: None,
-                    jobs: cx.jobs,
-                };
-                let focus = view!(ctx.editor).id;
-
-                command.execute(&mut ctx);
-
-                if ctx.editor.tree.contains(focus) {
-                    let config = ctx.editor.config();
-                    let mode = ctx.editor.mode();
-                    let view = view_mut!(ctx.editor, focus);
-                    let doc = doc_mut!(ctx.editor, &view.doc);
-
-                    view.ensure_cursor_in_view(doc, config.scrolloff);
-
-                    if mode != Mode::Insert {
-                        doc.append_changes_to_history(view);
+                    // A command that opens a picker or a prompt does so through a callback.
+                    for callback in callbacks {
+                        callback(compositor, cx);
                     }
-                }
-            });
-            compositor.push(Box::new(overlaid(picker)));
+                },
+            )
+            .with_title("Commands")
+            .with_header(vec![header]);
+            compositor.push(Box::new(picker));
         },
     ));
 }
