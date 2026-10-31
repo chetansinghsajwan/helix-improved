@@ -113,7 +113,8 @@ impl DockPanel for GitDock {
         match self.0.handle_event(&ct::Event::Key(key)) {
             git_panel::Action::Open(p) => PanelEvent::Open(p),
             git_panel::Action::Close => PanelEvent::Unfocus,
-            git_panel::Action::Changed | git_panel::Action::None => PanelEvent::None,
+            // The palette, the help and the host commands are for hosts that draw them (the standalone tools).
+            git_panel::Action::Changed | git_panel::Action::None | git_panel::Action::Palette | git_panel::Action::Help | git_panel::Action::Command(_) => PanelEvent::None,
         }
     }
 }
