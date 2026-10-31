@@ -32,7 +32,7 @@ impl Component for GitPanelComponent {
             return EventResult::Consumed(None);
         };
         match self.panel.handle_event(&ratatui::crossterm::event::Event::Key(ev)) {
-            git_panel::Action::None | git_panel::Action::Changed => EventResult::Consumed(None),
+            git_panel::Action::None | git_panel::Action::Changed | git_panel::Action::Palette | git_panel::Action::Help | git_panel::Action::Command(_) => EventResult::Consumed(None),
             git_panel::Action::Close => EventResult::Consumed(Some(Box::new(|compositor, _| {
                 compositor.pop();
             }))),
