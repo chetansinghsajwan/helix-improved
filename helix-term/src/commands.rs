@@ -462,6 +462,18 @@ impl MappableCommand {
         extend_to_column, "Extend to column",
         goto_next_buffer, "Goto next buffer",
         goto_previous_buffer, "Goto previous buffer",
+        goto_next_tab, "Goto next tab",
+        goto_previous_tab, "Goto previous tab",
+        tab_picker, "Open tab picker",
+        goto_tab_1, "Goto tab 1",
+        goto_tab_2, "Goto tab 2",
+        goto_tab_3, "Goto tab 3",
+        goto_tab_4, "Goto tab 4",
+        goto_tab_5, "Goto tab 5",
+        goto_tab_6, "Goto tab 6",
+        goto_tab_7, "Goto tab 7",
+        goto_tab_8, "Goto tab 8",
+        goto_tab_9, "Goto tab 9",
         goto_line_end_newline, "Goto newline at line end",
         goto_first_nonwhitespace, "Goto first non-blank in line",
         trim_selections, "Trim whitespace from selections",
@@ -907,6 +919,32 @@ fn goto_next_buffer(cx: &mut Context) {
 fn goto_previous_buffer(cx: &mut Context) {
     goto_buffer(cx.editor, Direction::Backward, cx.count());
 }
+
+// Tabs are what the editor calls its open buffers: the same word as in every other tool.
+fn goto_next_tab(cx: &mut Context) {
+    goto_buffer(cx.editor, Direction::Forward, cx.count());
+}
+
+fn goto_previous_tab(cx: &mut Context) {
+    goto_buffer(cx.editor, Direction::Backward, cx.count());
+}
+
+fn tab_picker(cx: &mut Context) {
+    buffer_picker(cx);
+}
+
+/// Switch to tab `n` (0-based), in the order the tab strip shows them.
+fn goto_tab(editor: &mut Editor, n: usize) {
+    match editor.documents.keys().nth(n).copied() {
+        Some(id) => editor.switch(id, Action::Replace),
+        None => editor.set_error(format!("no tab {}", n + 1)),
+    }
+}
+
+macro_rules! goto_tabs {
+    ($($name:ident => $n:expr),*) => { $(fn $name(cx: &mut Context) { goto_tab(cx.editor, $n); })* };
+}
+goto_tabs!(goto_tab_1 => 0, goto_tab_2 => 1, goto_tab_3 => 2, goto_tab_4 => 3, goto_tab_5 => 4, goto_tab_6 => 5, goto_tab_7 => 6, goto_tab_8 => 7, goto_tab_9 => 8);
 
 fn goto_buffer(editor: &mut Editor, direction: Direction, count: usize) {
     let current = view!(editor).doc;
@@ -3360,7 +3398,8 @@ fn buffer_picker(cx: &mut Context) {
             }
         },
     )
-    .with_cursor(cursor);
+    .with_cursor(cursor)
+    .with_title("Tabs");
     cx.push_layer(Box::new(picker));
 }
 
@@ -3619,7 +3658,7 @@ fn changed_file_picker(cx: &mut Context) {
 
 /// Commands everyone knows (movement, mode switches, ...): kept out of the command palette.
 fn palette_basic(name: &str) -> bool {
-    const PREFIXES: &[&str] = &["move_", "extend_", "page_", "half_page_", "scroll_", "insert_char", "delete_char_", "kill_to_"];
+    const PREFIXES: &[&str] = &["move_", "extend_", "page_", "half_page_", "scroll_", "insert_char", "delete_char_", "kill_to_", "goto_tab_"];
     const NAMES: &[&str] = &["normal_mode", "insert_mode", "select_mode", "no_op"];
     PREFIXES.iter().any(|p| name.starts_with(p)) || NAMES.contains(&name)
 }

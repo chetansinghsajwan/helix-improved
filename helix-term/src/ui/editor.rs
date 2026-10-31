@@ -638,8 +638,8 @@ impl EditorView {
         }
         let local = ratatui::layout::Rect::new(0, 0, viewport.width, 1);
         let mut buf = ratatui::buffer::Buffer::empty(local);
-        // Numbers would suggest `1`-`9` jumps, which helix does not have for buffers.
-        tui_design::tabs::render(local, &mut buf, design, &labels, active, false);
+        // The numbers are what `Space t 1`-`9` jump to.
+        tui_design::tabs::render(local, &mut buf, design, &labels, active, true);
         super::pick::copy(&buf, Rect::new(viewport.x, viewport.y, viewport.width, 1), surface);
     }
 
