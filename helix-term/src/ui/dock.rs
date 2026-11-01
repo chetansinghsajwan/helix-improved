@@ -63,6 +63,8 @@ pub trait DockPanel {
     }
     /// Show this file (the file explorer expands to it).
     fn reveal(&mut self, _path: &Path) {}
+    /// Reread what the panel shows (something changed on disk).
+    fn refresh(&mut self) {}
 }
 
 struct FilesDock(files::Panel);
@@ -94,6 +96,10 @@ impl DockPanel for FilesDock {
     fn reveal(&mut self, path: &Path) {
         self.0.reveal(path);
     }
+
+    fn refresh(&mut self) {
+        self.0.refresh();
+    }
 }
 
 /// The changed files (no diff pane: use `space g` for the full panel).
@@ -110,6 +116,10 @@ impl DockPanel for GitDock {
 
     fn is_typing(&self) -> bool {
         self.0.is_typing()
+    }
+
+    fn refresh(&mut self) {
+        self.0.refresh();
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
@@ -389,6 +399,15 @@ impl Docks {
             }
             d.draw_tabs(&mut buf, local, &theme);
             copy(&buf, from_ratatui(rect), surface);
+        }
+    }
+
+    /// Every created panel rereads what it shows.
+    pub fn refresh_all(&mut self) {
+        for side in [Side::Left, Side::Right, Side::Bottom] {
+            for panel in self.dock(side).panels.iter_mut().flatten() {
+                panel.refresh();
+            }
         }
     }
 

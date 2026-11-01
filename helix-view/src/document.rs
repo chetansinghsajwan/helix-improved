@@ -1730,6 +1730,11 @@ impl Document {
     }
 
     /// If there are unsaved modifications.
+    /// Whether the file on disk was changed (by something else) after this document last read or wrote it.
+    pub fn changed_on_disk(&self) -> bool {
+        self.path().and_then(|p| p.metadata().ok()).and_then(|m| m.modified().ok()).is_some_and(|m| m > self.last_saved_time)
+    }
+
     pub fn is_modified(&self) -> bool {
         let history = self.history.take();
         let current_revision = history.current_revision();
