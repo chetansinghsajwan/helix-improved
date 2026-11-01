@@ -47,6 +47,8 @@ pub enum PanelEvent {
     Created(PathBuf, bool),
     /// Files were renamed or moved; open buffers should follow.
     Moved(Vec<(PathBuf, PathBuf)>),
+    /// Files or folders were trashed or deleted; their buffers close.
+    Deleted(Vec<PathBuf>),
 }
 
 /// A panel that can sit in a dock.
@@ -84,6 +86,7 @@ impl DockPanel for FilesDock {
             files::Action::Close => PanelEvent::Unfocus,
             files::Action::Created(p, d) => PanelEvent::Created(p, d),
             files::Action::Moved(m) => PanelEvent::Moved(m),
+            files::Action::Deleted(d) => PanelEvent::Deleted(d),
             _ => PanelEvent::None,
         }
     }
