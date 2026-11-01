@@ -468,6 +468,7 @@ impl MappableCommand {
         move_next_word_in_line, "Move to the next word, stopping at the end of the line",
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
         markdown_preview, "Show the file rendered as Markdown",
+        keys_help, "Show the keys of the current mode",
         close_other_tabs, "Close all other tabs",
         format_document, "Format the file",
         indent_2_spaces, "Indent with 2 spaces",
@@ -3735,6 +3736,33 @@ fn palette_basic(name: &str) -> bool {
     const PREFIXES: &[&str] = &["move_", "extend_", "page_", "half_page_", "scroll_", "insert_char", "delete_char_", "kill_to_", "goto_tab_"];
     const NAMES: &[&str] = &["normal_mode", "insert_mode", "select_mode", "no_op"];
     PREFIXES.iter().any(|p| name.starts_with(p)) || NAMES.contains(&name)
+}
+
+/// The keys of the current mode in the shared searchable help (`Space h`).
+pub fn keys_help(cx: &mut Context) {
+    cx.callback.push(Box::new(|compositor: &mut Compositor, cx: &mut compositor::Context| {
+        let mode = cx.editor.mode();
+        let map = compositor.find::<ui::EditorView>().unwrap().keymaps.map()[&mode].reverse_map();
+        let doc_of: std::collections::HashMap<String, String> = MappableCommand::STATIC_COMMAND_LIST
+            .iter()
+            .cloned()
+            .chain(typed::TYPABLE_COMMAND_LIST.iter().map(|cmd| MappableCommand::Typable { name: cmd.name.to_owned(), args: String::new(), doc: cmd.doc.to_owned() }))
+            .map(|c| (c.name().to_string(), c.doc().lines().next().unwrap_or("").to_string()))
+            .collect();
+        let mut rows: Vec<tui_design::keys::Row> = map
+            .iter()
+            .map(|(name, bindings)| tui_design::keys::Row {
+                id: "",
+                name: name.clone().into(),
+                keys: bindings.iter().map(|b| b.iter().map(|k| k.key_sequence_format()).collect::<String>()).collect::<Vec<_>>().join(" / "),
+                desc: doc_of.get(name).cloned().unwrap_or_default().into(),
+                basic: false,
+            })
+            .collect();
+        rows.sort_by(|a, b| a.name.cmp(&b.name));
+        let title = format!("Keys: {mode:?}");
+        compositor.push(Box::new(ui::preview::KeysHelp::new(&title, rows)));
+    }));
 }
 
 /// The command palette: every command by name with its keys and description, in the shared

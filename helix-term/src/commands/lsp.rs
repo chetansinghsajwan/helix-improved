@@ -1,4 +1,4 @@
-use futures_util::{stream::FuturesOrdered, FutureExt};
+use futures_util::stream::FuturesOrdered;
 use helix_lsp::{
     block_on,
     lsp::{
@@ -439,126 +439,78 @@ pub fn symbol_picker(cx: &mut Context) {
 }
 
 pub fn workspace_symbol_picker(cx: &mut Context) {
-    use crate::ui::picker::Injector;
+    use std::sync::{atomic::Ordering, Arc, Mutex};
 
     let doc = doc!(cx.editor);
-    if doc
-        .language_servers_with_feature(LanguageServerFeature::WorkspaceSymbols)
-        .count()
-        == 0
-    {
+    let ids: Vec<_> = doc.language_servers_with_feature(LanguageServerFeature::WorkspaceSymbols).map(|ls| ls.id()).collect();
+    let servers: Vec<_> = ids.into_iter().filter_map(|id| cx.editor.language_servers.get_by_id(id).cloned()).collect();
+    if servers.is_empty() {
         cx.editor
             .set_error("No configured language server supports workspace symbols");
         return;
     }
 
-    let get_symbols = |pattern: &str, editor: &mut Editor, _data, injector: &Injector<_, _>| {
-        let doc = doc!(editor);
-        let mut seen_language_servers = HashSet::new();
-        let mut futures: FuturesOrdered<_> = doc
-            .language_servers_with_feature(LanguageServerFeature::WorkspaceSymbols)
-            .filter(|ls| seen_language_servers.insert(ls.id()))
-            .map(|language_server| {
-                let request = language_server
-                    .workspace_symbols(pattern.to_string())
-                    .unwrap();
-                let offset_encoding = language_server.offset_encoding();
-                async move {
-                    let symbols = request
-                        .await?
-                        .and_then(|resp| match resp {
-                            lsp::WorkspaceSymbolResponse::Flat(symbols) => Some(symbols),
-                            lsp::WorkspaceSymbolResponse::Nested(_) => None,
-                        })
-                        .unwrap_or_default();
-
-                    let response: Vec<_> = symbols
-                        .into_iter()
-                        .filter_map(|symbol| {
-                            let uri = match Uri::try_from(&symbol.location.uri) {
-                                Ok(uri) => uri,
-                                Err(err) => {
-                                    log::warn!("discarding symbol with invalid URI: {err}");
-                                    return None;
-                                }
-                            };
-                            Some(SymbolInformationItem {
-                                location: Location {
-                                    uri,
-                                    range: symbol.location.range,
-                                    offset_encoding,
-                                },
-                                symbol,
-                            })
-                        })
-                        .collect();
-
-                    anyhow::Ok(response)
-                }
-            })
-            .collect();
-
-        if futures.is_empty() {
-            editor.set_error("No configured language server supports workspace symbols");
-        }
-
-        let injector = injector.clone();
-        async move {
-            while let Some(response) = futures.next().await {
-                match response {
-                    Ok(items) => {
-                        for item in items {
-                            injector.push(item)?;
-                        }
+    // The shared picker with a live source: every change of the query asks the language
+    // servers again and the answers replace the list.
+    let found: Arc<Mutex<Vec<SymbolInformationItem>>> = Arc::default();
+    let results = found.clone();
+    let source: pick::LiveSource = Box::new(move |query, injector, cancel| {
+        let mut list = results.lock().unwrap();
+        list.clear();
+        drop(list);
+        for server in &servers {
+            let Some(request) = server.workspace_symbols(query.to_string()) else { continue };
+            let offset_encoding = server.offset_encoding();
+            let (results, injector, cancel) = (results.clone(), injector.clone(), cancel.clone());
+            tokio::spawn(async move {
+                let symbols = match request.await {
+                    Ok(Some(lsp::WorkspaceSymbolResponse::Flat(symbols))) => symbols,
+                    Ok(_) => return,
+                    Err(err) => {
+                        log::error!("Error requesting workspace symbols: {err}");
+                        return;
                     }
-                    Err(err) => log::error!("Error requesting workspace symbols: {err}"),
+                };
+                for symbol in symbols {
+                    let Ok(uri) = Uri::try_from(&symbol.location.uri) else { continue };
+                    let path = uri.as_path().map(|p| path::get_relative_path(p).to_string_lossy().into_owned()).unwrap_or_else(|| symbol.location.uri.to_string());
+                    let display = format!("{:<9} {}  {}  {}", display_symbol_kind(symbol.kind), symbol.name, symbol.container_name.as_deref().unwrap_or_default(), path);
+                    let item = SymbolInformationItem { location: Location { uri, range: symbol.location.range, offset_encoding }, symbol };
+                    // Held across the push, so a newer query (which sets `cancel` first) never sees a stale entry.
+                    let mut list = results.lock().unwrap();
+                    if cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    list.push(item);
+                    let index = list.len() - 1;
+                    injector.push(pick::Candidate::with_raw(display, index.to_string()), |c, cols| cols[0] = c.display.as_str().into());
                 }
-            }
-            Ok(())
+            });
         }
-        .boxed()
-    };
-    let columns = [
-        ui::PickerColumn::new("kind", |item: &SymbolInformationItem, _| {
-            display_symbol_kind(item.symbol.kind).into()
-        }),
-        ui::PickerColumn::new("name", |item: &SymbolInformationItem, _| {
-            item.symbol.name.as_str().into()
-        })
-        .without_filtering(),
-        ui::PickerColumn::new("container", |item: &SymbolInformationItem, _| {
-            item.symbol
-                .container_name
-                .as_deref()
-                .unwrap_or_default()
-                .into()
-        }),
-        ui::PickerColumn::new("path", |item: &SymbolInformationItem, _| {
-            if let Some(path) = item.location.uri.as_path() {
-                path::get_relative_path(path)
-                    .to_string_lossy()
-                    .to_string()
-                    .into()
-            } else {
-                item.symbol.location.uri.to_string().into()
-            }
-        }),
-    ];
+    });
 
-    let picker = Picker::new(
-        columns,
-        1, // name column
-        [],
-        (),
-        move |cx, item, action| {
-            jump_to_location(cx.editor, &item.location, action);
+    let opts = pick::PickerOptions {
+        mode: pick::Mode::Fuzzy,
+        paths: false,
+        root: helix_loader::find_workspace().0,
+        preview: false,
+        git: false,
+        query: String::new(),
+    };
+    let picker = ui::pick::PickComponent::new(
+        opts,
+        |_| {},
+        move |_compositor, cx, picked| {
+            let list = found.lock().unwrap();
+            let Some(item) = picked.first().and_then(|i| i.parse::<usize>().ok()).and_then(|i| list.get(i)) else {
+                return;
+            };
+            jump_to_location(cx.editor, &item.location, Action::Replace);
         },
     )
-    .with_preview(|_editor, item| location_to_file_location(&item.location))
-    .with_dynamic_query(get_symbols, None)
-    .truncate_start(false);
-
-    cx.push_layer(Box::new(overlaid(picker)));
+    .with_title("Workspace symbols")
+    .with_live(source);
+    cx.push_layer(Box::new(picker));
 }
 
 pub fn diagnostics_picker(cx: &mut Context) {

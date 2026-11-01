@@ -47,6 +47,12 @@ impl PickComponent {
         self
     }
 
+    /// Take the candidates from a source asked again for every query (see `pick::LiveSource`).
+    pub fn with_live(mut self, source: pick::LiveSource) -> Self {
+        self.picker.set_live(source);
+        self
+    }
+
     /// Pane title (`Commands`, ...).
     pub fn with_title(mut self, title: &str) -> Self {
         self.picker.set_title(title);
