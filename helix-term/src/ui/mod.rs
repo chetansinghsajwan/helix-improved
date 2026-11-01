@@ -9,6 +9,7 @@ pub mod overlay;
 pub mod dock;
 pub mod git_panel;
 pub mod pick;
+pub mod preview;
 pub mod picker;
 pub mod popup;
 pub mod prompt;

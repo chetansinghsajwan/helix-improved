@@ -14,12 +14,13 @@ use tui::buffer::Buffer as Surface;
 pub struct GitPanelComponent {
     panel: git_panel::Panel,
     theme: tui_design::Theme,
+    help: Option<tui_design::keys::Help>,
 }
 
 impl GitPanelComponent {
     /// The panel for the repository containing `path`; `None` if there is none.
     pub fn new(path: &Path) -> Option<Self> {
-        Some(GitPanelComponent { panel: git_panel::Panel::new(path)?, theme: tui_design::Theme::load() })
+        Some(GitPanelComponent { panel: git_panel::Panel::new(path)?, theme: tui_design::Theme::load(), help: None })
     }
 }
 
@@ -31,8 +32,18 @@ impl Component for GitPanelComponent {
         let Some(ev) = to_crossterm(key) else {
             return EventResult::Consumed(None);
         };
+        if let Some(help) = &mut self.help {
+            if !help.key(&ev) {
+                self.help = None;
+            }
+            return EventResult::Consumed(None);
+        }
         match self.panel.handle_event(&ratatui::crossterm::event::Event::Key(ev)) {
-            git_panel::Action::None | git_panel::Action::Changed | git_panel::Action::Palette | git_panel::Action::Help | git_panel::Action::Command(_) => EventResult::Consumed(None),
+            git_panel::Action::Help => {
+                self.help = Some(tui_design::keys::Help::default());
+                EventResult::Consumed(None)
+            }
+            git_panel::Action::None | git_panel::Action::Changed | git_panel::Action::Palette | git_panel::Action::Command(_) => EventResult::Consumed(None),
             git_panel::Action::Close => EventResult::Consumed(Some(Box::new(|compositor, _| {
                 compositor.pop();
             }))),
@@ -53,6 +64,9 @@ impl Component for GitPanelComponent {
         let r = RRect::new(0, 0, popup.width, popup.height);
         let mut buf = RBuffer::empty(r);
         self.panel.render(r, &mut buf, &self.theme);
+        if let Some(help) = &mut self.help {
+            help.render(r, &mut buf, &self.theme, "Keys", &self.panel.keys_rows());
+        }
         copy(&buf, popup, surface);
     }
 

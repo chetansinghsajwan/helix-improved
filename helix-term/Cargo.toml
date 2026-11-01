@@ -58,6 +58,7 @@ tui = { path = "../helix-tui", package = "helix-tui", default-features = false, 
 
 # Shared terminal toolkit (dotfiles/home/crates): picker, preview, design tokens, git.
 pick = { path = "../tuikit/crates/pick", default-features = false }
+pv = { path = "../tuikit/crates/pv" }
 files = { path = "../tuikit/crates/files" }
 git-panel = { path = "../tuikit/crates/git-panel" }
 diagnostics-panel = { path = "../tuikit/crates/diagnostics-panel" }

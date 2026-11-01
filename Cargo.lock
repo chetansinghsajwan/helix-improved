@@ -2980,6 +2980,7 @@ dependencies = [
  "open",
  "pick",
  "pulldown-cmark",
+ "pv",
  "ratatui",
  "same-file",
  "serde",
@@ -4225,6 +4226,7 @@ name = "pv"
 version = "0.1.0"
 dependencies = [
  "git-core",
+ "pulldown-cmark",
  "ratatui",
  "serde",
  "syntect",
