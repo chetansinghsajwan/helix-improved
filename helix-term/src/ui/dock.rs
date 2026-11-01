@@ -249,6 +249,8 @@ pub struct Docks {
     root: Option<PathBuf>,
     theme: Option<tui_design::Theme>,
     last: Option<DocksConfig>,
+    /// The file the panels last followed (the focused editor's file).
+    followed: Option<PathBuf>,
 }
 
 impl Docks {
@@ -347,7 +349,27 @@ impl Docks {
         (if self.left.shown() { w } else { 0 }, if self.right.shown() { w } else { 0 }, if self.bottom.shown() { h } else { 0 })
     }
 
+    /// Panels show the file of the focused editor even while they do not have the keyboard.
+    fn follow(&mut self, editor: &Editor) {
+        let current = editor.tree.try_get(editor.tree.focus).and_then(|v| editor.document(v.doc)).and_then(|d| d.path()).cloned();
+        if current == self.followed {
+            return;
+        }
+        self.followed = current.clone();
+        let Some(path) = current else { return };
+        for side in [Side::Left, Side::Right, Side::Bottom] {
+            let d = self.dock(side);
+            if d.focused {
+                continue;
+            }
+            for panel in d.panels.iter_mut().flatten() {
+                panel.reveal(&path);
+            }
+        }
+    }
+
     pub fn render(&mut self, wb: &tui_design::layout::Workbench, surface: &mut Surface, editor: &Editor) {
+        self.follow(editor);
         let theme = self.theme().clone();
         let root = self.root.clone().unwrap_or_default();
         for (side, rect) in [(Side::Left, wb.left), (Side::Right, wb.right), (Side::Bottom, wb.bottom)] {
