@@ -96,6 +96,11 @@ impl EditorView {
         self.docks.toggle(side, current)
     }
 
+    /// The dock panels reread what they show (files or git state changed outside the editor).
+    pub fn refresh_docks(&mut self) {
+        self.docks.refresh_all();
+    }
+
     /// Show a panel by name in the dock it is assigned to (`space e` for `files`).
     /// `false` if no dock holds it.
     pub fn dock_show(&mut self, id: &str, cfg: &helix_view::editor::DocksConfig, root: std::path::PathBuf, current: Option<&std::path::Path>) -> bool {

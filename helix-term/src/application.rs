@@ -68,6 +68,40 @@ pub struct Application {
     signals: Signals,
     jobs: Jobs,
     lsp_progress: LspProgressMap,
+    /// Reports changes made outside the editor (see `on_disk_change`).
+    _watch: Option<tui_design::watch::Watch>,
+}
+
+/// Something changed in the workspace: the dock panels reread it, and open files that changed
+/// on disk are reloaded (or, when they have unsaved edits, the user is told).
+fn on_disk_change(editor: &mut Editor, compositor: &mut Compositor) {
+    if let Some(view) = compositor.find::<ui::EditorView>() {
+        view.refresh_docks();
+    }
+    let focus_doc = editor.tree.try_get(editor.tree.focus).map(|v| v.doc);
+    let changed: Vec<_> = editor.documents.values().filter(|d| d.changed_on_disk()).map(|d| d.id()).collect();
+    let scrolloff = editor.config().scrolloff;
+    for id in changed {
+        let helix_view::Editor { tree, documents, diff_providers, language_servers, .. } = editor;
+        let Some(doc) = documents.get_mut(&id) else { continue };
+        if doc.is_modified() {
+            if focus_doc == Some(id) {
+                let name = doc.path().map(|p| p.display().to_string()).unwrap_or_default();
+                editor.set_status(format!("{name} changed on disk, your unsaved edits are kept (:reload takes the disk version)"));
+            }
+            continue;
+        }
+        let view_id = doc.selections().keys().next().copied().unwrap_or(tree.focus);
+        doc.ensure_view_init(view_id);
+        let view = tree.get_mut(view_id);
+        view.sync_changes(doc);
+        if doc.reload(view, diff_providers).is_ok() {
+            view.ensure_cursor_in_view(doc, scrolloff);
+            if let Some(path) = doc.path() {
+                language_servers.file_event_handler.file_changed(path.clone());
+            }
+        }
+    }
 }
 
 #[cfg(feature = "integration")]
@@ -242,6 +276,7 @@ impl Application {
             signals,
             jobs: Jobs::new(),
             lsp_progress: LspProgressMap::new(),
+            _watch: tui_design::watch::Watch::new(&helix_loader::find_workspace().0, || crate::job::dispatch_blocking(on_disk_change)),
         };
 
         Ok(app)
