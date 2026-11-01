@@ -467,6 +467,7 @@ impl MappableCommand {
         tab_picker, "Open tab picker",
         move_next_word_in_line, "Move to the next word, stopping at the end of the line",
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
+        markdown_preview, "Show the file rendered as Markdown",
         close_other_tabs, "Close all other tabs",
         format_document, "Format the file",
         indent_2_spaces, "Indent with 2 spaces",
@@ -947,6 +948,13 @@ fn run_typed(cx: &mut Context, line: &str) {
     if let Err(e) = typed::execute_command_line(&mut c, line, PromptEvent::Validate) {
         cx.editor.set_error(e.to_string());
     }
+}
+
+fn markdown_preview(cx: &mut Context) {
+    let (_view, doc) = current_ref!(cx.editor);
+    let title = doc.path().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Preview".into());
+    let source = doc.text().to_string();
+    cx.push_layer(Box::new(ui::preview::MarkdownPreview::new(&title, source)));
 }
 
 fn close_other_tabs(cx: &mut Context) {

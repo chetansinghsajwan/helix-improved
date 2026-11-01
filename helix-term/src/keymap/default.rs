@@ -309,6 +309,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "o" => close_other_tabs,
             },
             "=" => format_document,
+            "m" => markdown_preview,
             "i" => { "Indent"
                 "2" => indent_2_spaces,
                 "4" => indent_4_spaces,
