@@ -1399,6 +1399,13 @@ impl Component for EditorView {
                             }
                         }
                     }
+                    // A deleted file (or a file in a deleted folder) has nothing left to edit: close its buffer.
+                    PanelEvent::Deleted(gone) => {
+                        let ids: Vec<_> = cx.editor.documents.iter().filter(|(_, d)| d.path().is_some_and(|p| gone.iter().any(|g| p.starts_with(g)))).map(|(id, _)| *id).collect();
+                        for id in ids {
+                            let _ = cx.editor.close_document(id, true);
+                        }
+                    }
                     // A problem from the diagnostics panel: open the file at the place.
                     PanelEvent::OpenAt { path, line, col } => {
                         self.docks.unfocus();
