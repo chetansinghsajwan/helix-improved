@@ -79,3 +79,49 @@ impl Component for MarkdownPreview {
         (None, CursorKind::Hidden)
     }
 }
+
+/// The keys of the current mode, searchable (`Space h`): the shared help overlay over the
+/// editor's keymap.
+pub struct KeysHelp {
+    help: tui_design::keys::Help,
+    rows: Vec<tui_design::keys::Row>,
+    title: String,
+    theme: tui_design::Theme,
+}
+
+impl KeysHelp {
+    pub fn new(title: &str, rows: Vec<tui_design::keys::Row>) -> Self {
+        KeysHelp { help: Default::default(), rows, title: title.to_string(), theme: tui_design::Theme::load() }
+    }
+}
+
+impl Component for KeysHelp {
+    fn handle_event(&mut self, event: &Event, _cx: &mut Context) -> EventResult {
+        let Event::Key(key) = event else {
+            return EventResult::Ignored(None);
+        };
+        let Some(ev) = to_crossterm(key) else {
+            return EventResult::Consumed(None);
+        };
+        if self.help.key(&ev) {
+            return EventResult::Consumed(None);
+        }
+        EventResult::Consumed(Some(Box::new(|compositor, _| {
+            compositor.pop();
+        })))
+    }
+
+    fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
+        let full = RRect::new(area.x, area.y, area.width, area.height);
+        let p = tui_design::layout::popup(&self.theme, full);
+        let popup = Rect::new(p.x, p.y, p.width, p.height);
+        let r = RRect::new(0, 0, popup.width, popup.height);
+        let mut buf = RBuffer::empty(r);
+        self.help.render(r, &mut buf, &self.theme, &self.title, &self.rows);
+        copy(&buf, popup, surface);
+    }
+
+    fn cursor(&self, _area: Rect, _editor: &helix_view::Editor) -> (Option<helix_core::Position>, CursorKind) {
+        (None, CursorKind::Hidden)
+    }
+}

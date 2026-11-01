@@ -310,6 +310,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "=" => format_document,
             "m" => markdown_preview,
+            "H" => keys_help,
             "i" => { "Indent"
                 "2" => indent_2_spaces,
                 "4" => indent_4_spaces,
