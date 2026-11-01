@@ -67,7 +67,7 @@ pub trait DockPanel {
     fn refresh(&mut self) {}
 }
 
-struct FilesDock(files::Panel);
+struct FilesDock(files::Panel, Option<tui_design::keys::Help>);
 
 impl DockPanel for FilesDock {
     fn id(&self) -> &'static str {
@@ -76,19 +76,32 @@ impl DockPanel for FilesDock {
 
     fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
         self.0.render(area, buf, theme, focused);
+        if let Some(help) = &mut self.1 {
+            help.render(area, buf, theme, "Keys", &self.0.keys_rows());
+        }
     }
 
     fn is_typing(&self) -> bool {
-        self.0.is_typing()
+        self.0.is_typing() || self.1.is_some()
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
+        if let Some(help) = &mut self.1 {
+            if !help.key(&key) {
+                self.1 = None;
+            }
+            return PanelEvent::None;
+        }
         match self.0.handle_event(&ct::Event::Key(key)) {
             files::Action::Open(p) => PanelEvent::Open(p),
             files::Action::Close => PanelEvent::Unfocus,
             files::Action::Created(p, d) => PanelEvent::Created(p, d),
             files::Action::Moved(m) => PanelEvent::Moved(m),
             files::Action::Deleted(d) => PanelEvent::Deleted(d),
+            files::Action::Help => {
+                self.1 = Some(tui_design::keys::Help::default());
+                PanelEvent::None
+            }
             _ => PanelEvent::None,
         }
     }
@@ -103,7 +116,7 @@ impl DockPanel for FilesDock {
 }
 
 /// The changed files (no diff pane: use `space g` for the full panel).
-struct GitDock(git_panel::Panel);
+struct GitDock(git_panel::Panel, Option<tui_design::keys::Help>);
 
 impl DockPanel for GitDock {
     fn id(&self) -> &'static str {
@@ -112,10 +125,13 @@ impl DockPanel for GitDock {
 
     fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
         self.0.render_compact(area, buf, theme, focused);
+        if let Some(help) = &mut self.1 {
+            help.render(area, buf, theme, "Keys", &self.0.keys_rows());
+        }
     }
 
     fn is_typing(&self) -> bool {
-        self.0.is_typing()
+        self.0.is_typing() || self.1.is_some()
     }
 
     fn refresh(&mut self) {
@@ -123,11 +139,21 @@ impl DockPanel for GitDock {
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
+        if let Some(help) = &mut self.1 {
+            if !help.key(&key) {
+                self.1 = None;
+            }
+            return PanelEvent::None;
+        }
         match self.0.handle_event(&ct::Event::Key(key)) {
             git_panel::Action::Open(p) => PanelEvent::Open(p),
             git_panel::Action::Close => PanelEvent::Unfocus,
             // The palette, the help and the host commands are for hosts that draw them (the standalone tools).
-            git_panel::Action::Changed | git_panel::Action::None | git_panel::Action::Palette | git_panel::Action::Help | git_panel::Action::Command(_) => PanelEvent::None,
+            git_panel::Action::Help => {
+                self.1 = Some(tui_design::keys::Help::default());
+                PanelEvent::None
+            }
+            git_panel::Action::Changed | git_panel::Action::None | git_panel::Action::Palette | git_panel::Action::Command(_) => PanelEvent::None,
         }
     }
 }
@@ -185,8 +211,8 @@ impl DockPanel for DiagnosticsDock {
 fn make_panel(id: &str, root: &Path) -> Option<Box<dyn DockPanel>> {
     match id {
         "diagnostics" => Some(Box::new(DiagnosticsDock(diagnostics_panel::Panel::new(root)))),
-        "files" => Some(Box::new(FilesDock(files::Panel::new(root, files::PanelOptions::default())))),
-        "git" => git_panel::Panel::new(root).map(|p| Box::new(GitDock(p)) as Box<dyn DockPanel>),
+        "files" => Some(Box::new(FilesDock(files::Panel::new(root, files::PanelOptions::default()), None))),
+        "git" => git_panel::Panel::new(root).map(|p| Box::new(GitDock(p, None)) as Box<dyn DockPanel>),
         _ => None,
     }
 }

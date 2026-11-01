@@ -398,38 +398,40 @@ pub fn symbol_picker(cx: &mut Context) {
             }
         }
         let call = move |_editor: &mut Editor, compositor: &mut Compositor| {
-            let columns = [
-                ui::PickerColumn::new("kind", |item: &SymbolInformationItem, _| {
-                    display_symbol_kind(item.symbol.kind).into()
-                }),
-                // Some symbols in the document symbol picker may have a URI that isn't
-                // the current file. It should be rare though, so we concatenate that
-                // URI in with the symbol name in this picker.
-                ui::PickerColumn::new("name", |item: &SymbolInformationItem, _| {
-                    item.symbol.name.as_str().into()
-                }),
-                ui::PickerColumn::new("container", |item: &SymbolInformationItem, _| {
-                    item.symbol
-                        .container_name
-                        .as_deref()
-                        .unwrap_or_default()
-                        .into()
-                }),
-            ];
-
-            let picker = Picker::new(
-                columns,
-                1, // name column
-                symbols,
-                (),
-                move |cx, item, action| {
-                    jump_to_location(cx.editor, &item.location, action);
+            // The shared picker: kind, name and container in aligned columns, jump on accept.
+            let rows: Vec<(String, String, String)> = symbols
+                .iter()
+                .map(|s| (display_symbol_kind(s.symbol.kind).to_string(), s.symbol.name.clone(), s.symbol.container_name.clone().unwrap_or_default()))
+                .collect();
+            let kind_w = rows.iter().map(|r| r.0.chars().count()).max().unwrap_or(0).max("Kind".len());
+            let name_w = rows.iter().map(|r| r.1.chars().count()).max().unwrap_or(0).max("Name".len());
+            let header = format!("{:<kind_w$}  {:<name_w$}  Container", "Kind", "Name");
+            let candidates: Vec<pick::Candidate> = rows
+                .iter()
+                .enumerate()
+                .map(|(i, (k, n, c))| pick::Candidate::with_raw(format!("{k:<kind_w$}  {n:<name_w$}  {c}"), i.to_string()))
+                .collect();
+            let opts = pick::PickerOptions {
+                mode: pick::Mode::Fuzzy,
+                paths: false,
+                root: helix_loader::find_workspace().0,
+                preview: false,
+                git: false,
+                query: String::new(),
+            };
+            let picker = ui::pick::PickComponent::new(
+                opts,
+                move |p| pick::source::push_candidates(&p.injector(), candidates),
+                move |_compositor, cx, picked| {
+                    let Some(item) = picked.first().and_then(|i| i.parse::<usize>().ok()).and_then(|i| symbols.get(i)) else {
+                        return;
+                    };
+                    jump_to_location(cx.editor, &item.location, Action::Replace);
                 },
             )
-            .with_preview(move |_editor, item| location_to_file_location(&item.location))
-            .truncate_start(false);
-
-            compositor.push(Box::new(overlaid(picker)))
+            .with_title("Symbols")
+            .with_header(vec![header]);
+            compositor.push(Box::new(picker))
         };
 
         Ok(Callback::EditorCompositor(Box::new(call)))
