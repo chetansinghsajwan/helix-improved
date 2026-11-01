@@ -306,6 +306,14 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "n" => goto_next_tab,
                 "p" => goto_previous_tab,
                 "l" => tab_picker,
+                "o" => close_other_tabs,
+            },
+            "=" => format_document,
+            "i" => { "Indent"
+                "2" => indent_2_spaces,
+                "4" => indent_4_spaces,
+                "8" => indent_8_spaces,
+                "t" => indent_tabs,
             },
         },
         "z" => { "View"

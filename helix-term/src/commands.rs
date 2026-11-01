@@ -465,6 +465,12 @@ impl MappableCommand {
         goto_next_tab, "Goto next tab",
         goto_previous_tab, "Goto previous tab",
         tab_picker, "Open tab picker",
+        close_other_tabs, "Close all other tabs",
+        format_document, "Format the file",
+        indent_2_spaces, "Indent with 2 spaces",
+        indent_4_spaces, "Indent with 4 spaces",
+        indent_8_spaces, "Indent with 8 spaces",
+        indent_tabs, "Indent with tabs",
         goto_tab_1, "Goto tab 1",
         goto_tab_2, "Goto tab 2",
         goto_tab_3, "Goto tab 3",
@@ -931,6 +937,38 @@ fn goto_previous_tab(cx: &mut Context) {
 
 fn tab_picker(cx: &mut Context) {
     buffer_picker(cx);
+}
+
+/// Run a typed command line (`:format`) from a key.
+fn run_typed(cx: &mut Context, line: &str) {
+    let mut c = compositor::Context { editor: cx.editor, jobs: cx.jobs, scroll: None };
+    if let Err(e) = typed::execute_command_line(&mut c, line, PromptEvent::Validate) {
+        cx.editor.set_error(e.to_string());
+    }
+}
+
+fn close_other_tabs(cx: &mut Context) {
+    run_typed(cx, "buffer-close-others");
+}
+
+fn format_document(cx: &mut Context) {
+    run_typed(cx, "format");
+}
+
+fn indent_2_spaces(cx: &mut Context) {
+    run_typed(cx, "indent-style 2");
+}
+
+fn indent_4_spaces(cx: &mut Context) {
+    run_typed(cx, "indent-style 4");
+}
+
+fn indent_8_spaces(cx: &mut Context) {
+    run_typed(cx, "indent-style 8");
+}
+
+fn indent_tabs(cx: &mut Context) {
+    run_typed(cx, "indent-style tabs");
 }
 
 /// Switch to tab `n` (0-based), in the order the tab strip shows them.

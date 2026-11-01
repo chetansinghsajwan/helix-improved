@@ -1595,8 +1595,9 @@ impl Component for EditorView {
 
         // The docks (left and right sidebars, bottom panel) take room around the
         // editor and the ribbon (the status lines) is the very bottom row, below
-        // everything; -1 for the command line.
-        let main = area.clip_bottom(1);
+        // everything. The command line, a status message and the pending keys are drawn
+        // over it (there is no row of their own).
+        let main = area;
         let (left, right, bottom) = self.docks.sizes();
         let wb = tui_design::layout::workbench(super::dock::to_ratatui(main), left, right, bottom);
         let outer = super::dock::from_ratatui(wb.editor);
@@ -1606,7 +1607,8 @@ impl Component for EditorView {
         // its top, unless there is no room or the theme turns the box off.
         let boxed = self.docks.editor_box() && outer.width >= 24 && outer.height >= 8;
         let inner = if boxed { Rect::new(outer.x + 1, outer.y + 1, outer.width - 2, outer.height - 2) } else { outer };
-        let tabs = if use_bufferline { 1 } else { 0 };
+        // A tab row and, in the box, the rule under it.
+        let tabs = if use_bufferline { 1 + u16::from(boxed) } else { 0 };
         let mut view_area = inner.clip_top(tabs);
         // The views reach down to the ribbon row, which holds their status lines.
         // Between their text and that row lie the box's bottom border and the bottom
@@ -1661,6 +1663,9 @@ impl Component for EditorView {
         if boxed {
             let focused = self.docks.focused_side().is_none();
             super::dock::draw_border(surface, outer, self.docks.theme(), focused);
+            if use_bufferline {
+                super::dock::draw_rule(surface, outer, inner.y + 1, self.docks.theme(), focused);
+            }
         }
 
         if config.auto_info {
@@ -1683,6 +1688,8 @@ impl Component for EditorView {
                 cx.editor.theme.get("ui.text")
             };
 
+            // The message takes the whole ribbon row while it is shown.
+            surface.clear_with(Rect::new(area.x, area.y + area.height.saturating_sub(1), area.width, 1), Style::default());
             surface.set_string(
                 area.x,
                 area.y + area.height.saturating_sub(1),
@@ -1701,6 +1708,10 @@ impl Component for EditorView {
             }
             for key in &self.pseudo_pending {
                 disp.push_str(&key.key_sequence_format());
+            }
+            let pending_width = (disp.len() as u16).min(key_width);
+            if pending_width > 0 {
+                surface.clear_with(Rect::new(area.x + area.width.saturating_sub(key_width + 3), area.y + area.height.saturating_sub(1), key_width + 3, 1), Style::default());
             }
             let style = cx.editor.theme.get("ui.text");
             let macro_width = if cx.editor.macro_recording.is_some() {

@@ -3674,7 +3674,7 @@ pub static TYPABLE_COMMAND_MAP: Lazy<HashMap<&'static str, &'static TypableComma
             .collect()
     });
 
-fn execute_command_line(
+pub(super) fn execute_command_line(
     cx: &mut compositor::Context,
     input: &str,
     event: PromptEvent,

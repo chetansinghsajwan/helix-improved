@@ -451,3 +451,22 @@ pub fn draw_border(surface: &mut Surface, rect: Rect, theme: &tui_design::Theme,
         }
     }
 }
+
+/// A horizontal rule across `rect` at row `y`, joined to the box border on both ends,
+/// in the border's color (the line under the tabs).
+pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::Theme, focused: bool) {
+    if rect.width < 3 || y < rect.y || y >= rect.bottom() {
+        return;
+    }
+    let local = RRect::new(0, 0, rect.width, rect.height);
+    let mut buf = RBuffer::empty(local);
+    tui_design::Pane::new(theme).focused(focused).render(local, &mut buf);
+    let fg = super::pick::color(buf[(0, 0)].fg);
+    for x in rect.x..rect.right() {
+        let sym = if x == rect.x { "├" } else if x == rect.right() - 1 { "┤" } else { "─" };
+        if let Some(dst) = surface.get_mut(x, y) {
+            dst.set_symbol(sym);
+            dst.fg = fg;
+        }
+    }
+}
