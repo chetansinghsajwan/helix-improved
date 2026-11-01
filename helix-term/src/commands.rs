@@ -3683,6 +3683,8 @@ pub fn command_palette(cx: &mut Context) {
                 }))
                 .filter(|c| !palette_basic(c.name()))
                 .collect();
+            // The commands run last come first (like VS Code and Zed), the rest in helix's order.
+            let commands = tui_design::recent::order(commands, &tui_design::recent::load("helix"), |c| c.name());
 
             let name_of = |c: &MappableCommand| match c {
                 MappableCommand::Typable { name, .. } => format!(":{name}"),
@@ -3726,6 +3728,7 @@ pub fn command_palette(cx: &mut Context) {
                     let Some(command) = picked.first().and_then(|i| i.parse::<usize>().ok()).and_then(|i| commands.get(i)) else {
                         return;
                     };
+                    tui_design::recent::record("helix", command.name());
                     let mut ctx = Context {
                         register,
                         count,
