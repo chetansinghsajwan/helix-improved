@@ -465,6 +465,8 @@ impl MappableCommand {
         goto_next_tab, "Goto next tab",
         goto_previous_tab, "Goto previous tab",
         tab_picker, "Open tab picker",
+        move_next_word_in_line, "Move to the next word, stopping at the end of the line",
+        move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
         close_other_tabs, "Close all other tabs",
         format_document, "Format the file",
         indent_2_spaces, "Indent with 2 spaces",
@@ -1269,6 +1271,32 @@ fn move_next_word_start(cx: &mut Context) {
 
 fn move_prev_word_start(cx: &mut Context) {
     move_word_impl(cx, movement::move_prev_word_start)
+}
+
+/// A word move that stops at the end (or start) of the line it began on; pressed again there, it goes on to the next line.
+fn move_word_in_line(cx: &mut Context, forward: bool) {
+    let count = cx.count();
+    let (view, doc) = current!(cx.editor);
+    let text = doc.text().slice(..);
+    let selection = doc.selection(view.id).clone().transform(|range| {
+        let new = if forward { movement::move_next_word_start(text, range, count) } else { movement::move_prev_word_start(text, range, count) };
+        let from = range.cursor(text);
+        let line = text.char_to_line(from);
+        if text.char_to_line(new.cursor(text)) == line {
+            return new;
+        }
+        let edge = if forward { line_end_char_index(&text, line) } else { text.line_to_char(line) };
+        if from == edge { new } else { Range::point(edge) }
+    });
+    doc.set_selection(view.id, selection);
+}
+
+fn move_next_word_in_line(cx: &mut Context) {
+    move_word_in_line(cx, true)
+}
+
+fn move_prev_word_in_line(cx: &mut Context) {
+    move_word_in_line(cx, false)
 }
 
 fn move_prev_word_end(cx: &mut Context) {
@@ -3155,7 +3183,7 @@ fn pick_files(cx: &mut Context, root: PathBuf) {
     let walk_root = root.clone();
     let picker = ui::pick::PickComponent::new(
         opts,
-        move |p| source::spawn_files(p.injector(), walk_root, false),
+        move |p| source::spawn_files(p.injector(), walk_root, false, None),
         move |_compositor, cx, picked| open_picked(cx, &root, picked),
     )
     .with_tree(true);
