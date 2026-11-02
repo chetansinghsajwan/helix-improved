@@ -21,8 +21,9 @@ impl Component for Info {
         }
 
         // The popup sits in the centre of the viewport.
-        let width = self.width + 2 + 2; // +2 for border, +2 for margin
-        let height = self.height + 2; // +2 for border
+        // A fixed size (the shared Quick Keys size), so the popup does not jump between levels.
+        let width = tui_design::keys::MENU_WIDTH.min(viewport.width);
+        let height = tui_design::keys::menu_height(viewport.height);
         let area = viewport.intersection(Rect::new(
             viewport.width.saturating_sub(width) / 2,
             viewport.height.saturating_sub(height) / 2,
