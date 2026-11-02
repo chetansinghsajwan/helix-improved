@@ -1,30 +1,40 @@
-//! Dim what is behind a popup (see `tui_design::dim`): the same idea on helix's own surface.
+//! Dim what is behind a popup (see `tui_design::dim`): the same idea on helix's own surface, with
+//! the same colour mixing (`tui_design::mix`).
 
 use helix_view::graphics::{Color, Modifier, Rect};
+use ratatui::style::Color as RColor;
+use std::sync::OnceLock;
 use tui::buffer::Buffer as Surface;
+
+/// The design background colour, read once (the theme file is not parsed again for every frame).
+fn background() -> RColor {
+    static BG: OnceLock<RColor> = OnceLock::new();
+    *BG.get_or_init(|| tui_design::Theme::load().colors.bg.into())
+}
+
+/// Mix `c` toward the background like `tui_design::dim` does; colours that are not RGB stay as they are.
+fn mixed(c: Color, base: RColor) -> Color {
+    let Color::Rgb(r, g, b) = c else { return c };
+    match tui_design::mix(RColor::Rgb(r, g, b), base, tui_design::dim::KEEP) {
+        RColor::Rgb(r, g, b) => Color::Rgb(r, g, b),
+        _ => c,
+    }
+}
 
 /// Dim every cell of `area`: colours move toward the design background, default colours get the
 /// terminal's dim attribute.
 pub fn dim(surface: &mut Surface, area: Rect) {
-    let keep = u32::from(tui_design::dim::KEEP);
-    let Color::Rgb(br, bg, bb) = super::pick::color(tui_design::Theme::load().colors.bg.into()) else { return };
-    let mix = |c: Color| match c {
-        Color::Rgb(r, g, b) => {
-            let m = |a: u8, base: u8| ((u32::from(a) * keep + u32::from(base) * (100 - keep)) / 100) as u8;
-            Color::Rgb(m(r, br), m(g, bg), m(b, bb))
-        }
-        other => other,
-    };
+    let base = background();
     let area = area.intersection(surface.area);
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             let Some(cell) = surface.get_mut(x, y) else { continue };
             if matches!(cell.fg, Color::Rgb(..)) {
-                cell.fg = mix(cell.fg);
+                cell.fg = mixed(cell.fg, base);
             } else {
                 cell.modifier.insert(Modifier::DIM);
             }
-            cell.bg = mix(cell.bg);
+            cell.bg = mixed(cell.bg, base);
         }
     }
 }
