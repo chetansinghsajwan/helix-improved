@@ -13,9 +13,9 @@ fn background() -> RColor {
 }
 
 /// Mix `c` toward the background like `tui_design::dim` does; colours that are not RGB stay as they are.
-fn mixed(c: Color, base: RColor) -> Color {
+fn mixed(c: Color, base: RColor, keep: u8) -> Color {
     let Color::Rgb(r, g, b) = c else { return c };
-    match tui_design::mix(RColor::Rgb(r, g, b), base, tui_design::dim::KEEP) {
+    match tui_design::mix(RColor::Rgb(r, g, b), base, keep) {
         RColor::Rgb(r, g, b) => Color::Rgb(r, g, b),
         _ => c,
     }
@@ -24,17 +24,26 @@ fn mixed(c: Color, base: RColor) -> Color {
 /// Dim every cell of `area`: colours move toward the design background, default colours get the
 /// terminal's dim attribute.
 pub fn dim(surface: &mut Surface, area: Rect) {
+    dim_to(surface, area, tui_design::dim::KEEP);
+}
+
+/// A panel that does not have the focus: a lighter dimming.
+pub fn dim_inactive(surface: &mut Surface, area: Rect) {
+    dim_to(surface, area, tui_design::dim::KEEP_INACTIVE);
+}
+
+fn dim_to(surface: &mut Surface, area: Rect, keep: u8) {
     let base = background();
     let area = area.intersection(surface.area);
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             let Some(cell) = surface.get_mut(x, y) else { continue };
             if matches!(cell.fg, Color::Rgb(..)) {
-                cell.fg = mixed(cell.fg, base);
+                cell.fg = mixed(cell.fg, base, keep);
             } else {
                 cell.modifier.insert(Modifier::DIM);
             }
-            cell.bg = mixed(cell.bg, base);
+            cell.bg = mixed(cell.bg, base, keep);
         }
     }
 }

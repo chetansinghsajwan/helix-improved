@@ -1679,6 +1679,17 @@ impl Component for EditorView {
             }
         }
 
+        // The panels that do not have the focus are dimmed a little: the editor while a dock has it, the docks while the editor has it.
+        let focus = self.docks.focused_side();
+        for (side, rect) in [(super::dock::Side::Left, wb.left), (super::dock::Side::Right, wb.right), (super::dock::Side::Bottom, wb.bottom)] {
+            if rect.width > 0 && rect.height > 0 && focus != Some(side) {
+                super::dim::dim_inactive(surface, super::dock::from_ratatui(rect));
+            }
+        }
+        if focus.is_some() {
+            super::dim::dim_inactive(surface, outer);
+        }
+
         if config.auto_info {
             if let Some(mut info) = cx.editor.autoinfo.take() {
                 info.render(area, surface, cx);
