@@ -21,6 +21,9 @@ impl Component for Info {
         }
 
         // The popup sits in the centre of the viewport.
+        // What is behind the popup is dimmed.
+        super::dim::dim(surface, viewport);
+
         // A fixed size (the shared Quick Keys size), so the popup does not jump between levels.
         let width = tui_design::keys::MENU_WIDTH.min(viewport.width);
         let height = tui_design::keys::menu_height(viewport.height);

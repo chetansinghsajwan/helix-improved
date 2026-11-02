@@ -6,6 +6,7 @@ pub mod lsp;
 mod markdown;
 pub mod menu;
 pub mod overlay;
+pub mod dim;
 pub mod dock;
 pub mod git_panel;
 pub mod pick;

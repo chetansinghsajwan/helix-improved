@@ -30,6 +30,10 @@ impl MarkdownPreview {
 }
 
 impl Component for MarkdownPreview {
+    fn dims_background(&self) -> bool {
+        true
+    }
+
     fn handle_event(&mut self, event: &Event, _cx: &mut Context) -> EventResult {
         let Event::Key(key) = event else {
             return EventResult::Ignored(None);
@@ -96,6 +100,10 @@ impl KeysHelp {
 }
 
 impl Component for KeysHelp {
+    fn dims_background(&self) -> bool {
+        true
+    }
+
     fn handle_event(&mut self, event: &Event, _cx: &mut Context) -> EventResult {
         let Event::Key(key) = event else {
             return EventResult::Ignored(None);

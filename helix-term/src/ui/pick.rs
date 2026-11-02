@@ -73,6 +73,10 @@ impl PickComponent {
 }
 
 impl Component for PickComponent {
+    fn dims_background(&self) -> bool {
+        true
+    }
+
     fn handle_event(&mut self, event: &Event, _cx: &mut Context) -> EventResult {
         let Event::Key(key) = event else {
             return EventResult::Ignored(None);
