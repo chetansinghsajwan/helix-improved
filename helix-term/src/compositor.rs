@@ -52,6 +52,11 @@ pub trait Component: Any + AnyComponent {
     /// Render the component onto the provided surface.
     fn render(&mut self, area: Rect, frame: &mut Surface, ctx: &mut Context);
 
+    /// Whether what is behind this layer is dimmed while it shows (popups that take the focus).
+    fn dims_background(&self) -> bool {
+        false
+    }
+
     /// Get cursor position and cursor kind.
     fn cursor(&self, _area: Rect, _ctx: &Editor) -> (Option<Position>, CursorKind) {
         (None, CursorKind::Hidden)
@@ -177,7 +182,11 @@ impl Compositor {
     }
 
     pub fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
-        for layer in &mut self.layers {
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            // The editor is the first layer; a focus-taking popup above it dims everything below.
+            if i > 0 && layer.dims_background() {
+                crate::ui::dim::dim(surface, area);
+            }
             layer.render(area, surface, cx);
         }
     }
