@@ -281,6 +281,9 @@ pub enum KeymapResult {
     /// Key is invalid in combination with previous keys. Contains keys leading upto
     /// and including current (invalid) key.
     Cancelled(Vec<KeyEvent>),
+    /// Key is not bound inside a menu (outside insert mode): the menu stays open at the same
+    /// level. Contains that menu and the keys typed, including the unbound one.
+    Rejected(KeyTrieNode, Vec<KeyEvent>),
 }
 
 /// A map of command names to keybinds that will execute the command.
@@ -375,6 +378,14 @@ impl Keymaps {
             Some(KeyTrie::Sequence(cmds)) => {
                 self.state.clear();
                 KeymapResult::MatchedSequence(cmds.clone())
+            }
+            None if mode != Mode::Insert => {
+                let typed: Vec<KeyEvent> = self.state.clone();
+                self.state.pop();
+                match trie.search(&self.state[1..]) {
+                    Some(KeyTrie::Node(map)) => KeymapResult::Rejected(map.clone(), typed),
+                    _ => KeymapResult::Cancelled(self.state.drain(..).collect()),
+                }
             }
             None => KeymapResult::Cancelled(self.state.drain(..).collect()),
         }

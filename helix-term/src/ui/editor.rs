@@ -912,6 +912,12 @@ impl EditorView {
                     execute_command(command);
                 }
             }
+            KeymapResult::Rejected(node, typed) => {
+                // The menu stays; the error names the key.
+                cxt.editor.autoinfo = Some(node.infobox());
+                let shown: String = typed.iter().map(|k| k.key_sequence_format()).collect::<Vec<_>>().join(" ");
+                cxt.editor.set_error(format!("{shown} is not bound"));
+            }
             KeymapResult::NotFound | KeymapResult::Cancelled(_) => return Some(key_result),
         }
         None
