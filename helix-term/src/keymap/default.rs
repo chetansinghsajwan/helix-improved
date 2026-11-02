@@ -220,7 +220,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
         "C-o" => jump_backward,
         "C-s" => save_selection,
 
-        "space" => { "Space"
+        "space" => { "Quick Keys"
             "f" => file_picker,
             "F" => file_picker_in_current_directory,
             "e" => files_panel,
