@@ -395,6 +395,10 @@ impl Docks {
             return;
         }
         self.followed = current.clone();
+        // A file opened from somewhere else (a picker, a jump) takes the keyboard back from the docks.
+        for side in [Side::Left, Side::Right, Side::Bottom] {
+            self.dock(side).focused = false;
+        }
         let Some(path) = current else { return };
         for side in [Side::Left, Side::Right, Side::Bottom] {
             let d = self.dock(side);
