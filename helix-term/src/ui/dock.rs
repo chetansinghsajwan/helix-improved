@@ -558,7 +558,7 @@ pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::
 impl Docks {
     /// While the files pane has the keyboard, a preview of the highlighted file fills the part of the
     /// editor next to it (the pane's own width stays small).
-    /// Drawn last, over the editor, so nothing dims or covers it. `view` is the inside of the editor box: the pane is as tall as it.
+    /// Drawn last, over the editor, so nothing dims or covers it. `view` is the whole editor pane (its border included): the preview is a pane of the same height, beside the dock.
     pub fn render_preview(&mut self, wb: &tui_design::layout::Workbench, view: Rect, surface: &mut Surface, editor: &Editor) {
         if !editor.config().dock_preview {
             return;
@@ -581,14 +581,15 @@ impl Docks {
         let Some((side, dock, path)) = target else { return };
         let editor = to_ratatui(view);
         let _ = wb.editor;
-        // Half of the editor, at least 36 columns, a column apart from the dock so it reads as a pane of its own.
+        // Half of the editor pane, at least 36 columns, from the dock to the right (or from the right edge for a right dock).
         let width = (editor.width / 2).max(36).min(editor.width.saturating_sub(1));
+        let _ = dock;
         if editor.width < 50 || editor.height < 6 {
             return;
         }
         let area = match side {
-            Side::Left => RRect::new(dock.right() + 1, editor.y, width, editor.height),
-            _ => RRect::new(dock.x.saturating_sub(width + 1), editor.y, width, editor.height),
+            Side::Left => RRect::new(editor.x, editor.y, width, editor.height),
+            _ => RRect::new(editor.right().saturating_sub(width), editor.y, width, editor.height),
         };
         let local = RRect::new(0, 0, area.width, area.height);
         let mut buf = RBuffer::empty(local);

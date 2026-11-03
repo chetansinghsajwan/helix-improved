@@ -1763,8 +1763,8 @@ impl Component for EditorView {
             super::dim::dim_inactive(surface, outer);
         }
 
-        // The preview of the highlighted file beside the files pane goes over all of it, undimmed, as tall as the editor box (from the tabs row down).
-        self.docks.render_preview(&wb, inner, surface, cx.editor);
+        // The preview of the highlighted file beside the files pane goes over all of it, undimmed, a pane as tall as the editor pane beside the dock.
+        self.docks.render_preview(&wb, outer, surface, cx.editor);
 
         if config.auto_info {
             if let Some(mut info) = cx.editor.autoinfo.take() {
