@@ -69,6 +69,10 @@ pub trait DockPanel {
     fn preview_target(&self) -> Option<PathBuf> {
         None
     }
+    /// The width the panel would like while it has the keyboard (a long name that does not fit).
+    fn wanted_width(&self, _theme: &tui_design::Theme) -> Option<u16> {
+        None
+    }
 }
 
 struct FilesDock(files::Panel, Option<tui_design::keys::Help>);
@@ -91,6 +95,10 @@ impl DockPanel for FilesDock {
 
     fn preview_target(&self) -> Option<PathBuf> {
         self.0.current().map(Path::to_path_buf)
+    }
+
+    fn wanted_width(&self, theme: &tui_design::Theme) -> Option<u16> {
+        Some(self.0.wanted_width(theme))
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
@@ -397,7 +405,22 @@ impl Docks {
             let t = self.theme();
             (t.layout.sidebar_width, t.layout.bottom_height)
         };
-        (if self.left.shown() { w } else { 0 }, if self.right.shown() { w } else { 0 }, if self.bottom.shown() { h } else { 0 })
+        // A side dock that has the keyboard grows to fit a long name (up to twice its width), and goes back when it loses it.
+        let root = self.root.clone().unwrap_or_default();
+        let theme = self.theme().clone();
+        let mut side_width = |dock: &mut Dock| -> u16 {
+            if !dock.shown() {
+                return 0;
+            }
+            if dock.focused {
+                if let Some(want) = dock.active_panel(&root).and_then(|p| p.wanted_width(&theme)) {
+                    return want.clamp(w, (w * 2).max(50));
+                }
+            }
+            w
+        };
+        let (left, right) = (side_width(&mut self.left), side_width(&mut self.right));
+        (left, right, if self.bottom.shown() { h } else { 0 })
     }
 
     /// Panels show the file of the focused editor even while they do not have the keyboard.
@@ -441,9 +464,6 @@ impl Docks {
             }
             d.draw_tabs(&mut buf, local, &theme);
             copy(&buf, from_ratatui(rect), surface);
-        }
-        if editor.config().dock_preview {
-            self.render_preview(wb, surface, &theme, &root);
         }
     }
 
@@ -538,7 +558,14 @@ pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::
 impl Docks {
     /// While the files pane has the keyboard, a preview of the highlighted file fills the part of the
     /// editor next to it (the pane's own width stays small).
-    fn render_preview(&mut self, wb: &tui_design::layout::Workbench, surface: &mut Surface, theme: &tui_design::Theme, root: &Path) {
+    /// Drawn last, over the editor (below its tabs), so nothing dims or covers it. `view` is the text area of the editor.
+    pub fn render_preview(&mut self, wb: &tui_design::layout::Workbench, view: Rect, surface: &mut Surface, editor: &Editor) {
+        if !editor.config().dock_preview {
+            return;
+        }
+        let theme = &self.theme().clone();
+        let root = self.root.clone().unwrap_or_default();
+        let root = root.as_path();
         let mut target = None;
         for (side, rect) in [(Side::Left, wb.left), (Side::Right, wb.right)] {
             let d = self.dock(side);
@@ -552,21 +579,22 @@ impl Docks {
             }
         }
         let Some((side, dock, path)) = target else { return };
-        let editor = wb.editor;
-        // Half of the editor, at least 36 columns, next to the dock.
-        let width = (editor.width / 2).max(36).min(editor.width);
+        let editor = to_ratatui(view);
+        let _ = wb.editor;
+        // Half of the editor, at least 36 columns, a column apart from the dock so it reads as a pane of its own.
+        let width = (editor.width / 2).max(36).min(editor.width.saturating_sub(1));
         if editor.width < 50 || editor.height < 6 {
             return;
         }
         let area = match side {
-            Side::Left => RRect::new(dock.right(), editor.y, width, editor.height),
-            _ => RRect::new(dock.x.saturating_sub(width), editor.y, width, editor.height),
+            Side::Left => RRect::new(dock.right() + 1, editor.y, width, editor.height),
+            _ => RRect::new(dock.x.saturating_sub(width + 1), editor.y, width, editor.height),
         };
         let local = RRect::new(0, 0, area.width, area.height);
         let mut buf = RBuffer::empty(local);
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let icon = if path.is_dir() { tui_design::icons::dir(&name, false) } else { tui_design::icons::file(&name, false) };
-        let pane = tui_design::Pane::new(theme).title(&name).icon(icon);
+        let pane = tui_design::Pane::new(theme).title(&name).icon(icon).focused(true);
         let inner = pane.inner(local);
         pane.render(local, &mut buf);
         if inner.width > 0 && inner.height > 0 {
