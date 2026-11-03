@@ -545,6 +545,47 @@ fn format(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyh
     Ok(())
 }
 
+/// Export the buffer as Markdown to a PDF next to the file (or the path given), without blocking the editor.
+fn markdown_export(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    let doc = doc!(cx.editor);
+    let Some(path) = doc.path().cloned() else {
+        anyhow::bail!("save the buffer first: the PDF is named after the file")
+    };
+    let text = doc.text().to_string();
+    let out = args.first().map(std::path::PathBuf::from).unwrap_or_else(|| path.with_extension("pdf"));
+    let base = path.parent().map(|p| p.to_path_buf());
+    cx.editor.set_status(format!("exporting {} …", out.display()));
+    cx.jobs.callback(async move {
+        let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            use std::io::Write;
+            let mut cmd = std::process::Command::new("mdexport");
+            cmd.arg("-").arg("-o").arg(&out);
+            if let Some(b) = &base {
+                cmd.arg("--base").arg(b);
+            }
+            let mut child = cmd.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn().map_err(|e| format!("mdexport: {e}"))?;
+            child.stdin.take().ok_or("mdexport: no stdin")?.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+            let done = child.wait_with_output().map_err(|e| e.to_string())?;
+            if done.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&done.stderr).trim().to_string()) }
+        })
+        .await;
+        let message: Result<String, String> = match result {
+            Ok(Ok(())) => Ok("exported the PDF".to_string()),
+            Ok(Err(e)) => Err(e),
+            Err(e) => Err(e.to_string()),
+        };
+        let call: job::Callback = Callback::EditorCompositor(Box::new(move |editor, _| match message {
+            Ok(m) => editor.set_status(m),
+            Err(e) => editor.set_error(e),
+        }));
+        Ok(call)
+    });
+    Ok(())
+}
+
 fn set_indent_style(
     cx: &mut compositor::Context,
     args: Args,
@@ -2843,6 +2884,17 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
         completer: CommandCompleter::none(),
         signature: Signature {
             positionals: (0, Some(0)),
+            ..Signature::DEFAULT
+        },
+    },
+    TypableCommand {
+        name: "markdown-export",
+        aliases: &["md-export"],
+        doc: "Export the buffer as a PDF (next to the file, or at the given path); needs the mdexport tool.",
+        fun: markdown_export,
+        completer: CommandCompleter::none(),
+        signature: Signature {
+            positionals: (0, Some(1)),
             ..Signature::DEFAULT
         },
     },

@@ -468,6 +468,7 @@ impl MappableCommand {
         move_next_word_in_line, "Move to the next word, stopping at the end of the line",
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
         markdown_preview, "Markdown preview mode: the file rendered, read only",
+        markdown_export_pdf, "Export the Markdown file as a PDF",
         markdown_live, "Markdown live mode: rendered except where the cursor is",
         markdown_source, "Markdown source mode: the file as written",
         keys_help, "Show the keys of the current mode",
@@ -976,6 +977,10 @@ fn markdown_source(cx: &mut Context) {
     let (_view, doc) = current!(cx.editor);
     doc.markdown_live = false;
     cx.editor.set_status("Markdown: source");
+}
+
+fn markdown_export_pdf(cx: &mut Context) {
+    run_typed(cx, "markdown-export");
 }
 
 fn close_other_tabs(cx: &mut Context) {

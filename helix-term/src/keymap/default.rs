@@ -313,6 +313,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "p" => markdown_preview,
                 "l" => markdown_live,
                 "s" => markdown_source,
+                "e" => markdown_export_pdf,
             },
             "H" => keys_help,
             "i" => { "Indent"
