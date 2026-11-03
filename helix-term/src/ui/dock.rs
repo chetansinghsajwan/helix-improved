@@ -593,9 +593,7 @@ impl Docks {
         };
         let local = RRect::new(0, 0, area.width, area.height);
         let mut buf = RBuffer::empty(local);
-        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let icon = if path.is_dir() { tui_design::icons::dir(&name, false) } else { tui_design::icons::file(&name, false) };
-        let pane = tui_design::Pane::new(theme).title(&name).icon(icon).focused(true);
+        let pane = tui_design::Pane::new(theme).focused(true);
         let inner = pane.inner(local);
         pane.render(local, &mut buf);
         if inner.width > 0 && inner.height > 0 {
