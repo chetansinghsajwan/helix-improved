@@ -334,6 +334,10 @@ pub struct Config {
     pub whitespace: WhitespaceConfig,
     /// Persistently display open buffers along the top
     pub bufferline: BufferLine,
+    /// A zoomed-out overview of the file along the right edge of every view. Defaults to `false`.
+    pub minimap: bool,
+    /// Its width in columns (each column is two dots wide). Defaults to `10`.
+    pub minimap_width: u16,
     /// Vertical indent width guides.
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
@@ -1035,6 +1039,8 @@ impl Default for Config {
             rulers: Vec::new(),
             whitespace: WhitespaceConfig::default(),
             bufferline: BufferLine::default(),
+            minimap: false,
+            minimap_width: 10,
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,
             soft_wrap: SoftWrap {

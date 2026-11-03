@@ -316,6 +316,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "e" => markdown_export_pdf,
             },
             "H" => keys_help,
+            "M" => toggle_minimap,
             "i" => { "Indent"
                 "2" => indent_2_spaces,
                 "4" => indent_4_spaces,

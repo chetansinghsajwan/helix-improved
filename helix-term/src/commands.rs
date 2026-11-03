@@ -469,6 +469,7 @@ impl MappableCommand {
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
         markdown_preview, "Markdown preview mode: the file rendered, read only",
         markdown_export_pdf, "Export the Markdown file as a PDF",
+        toggle_minimap, "Show or hide the minimap",
         markdown_live, "Markdown live mode: rendered except where the cursor is",
         markdown_source, "Markdown source mode: the file as written",
         keys_help, "Show the keys of the current mode",
@@ -984,6 +985,11 @@ fn markdown_export_pdf(cx: &mut Context) {
         Ok(popup) => cx.push_layer(Box::new(popup)),
         Err(e) => cx.editor.set_error(e),
     }
+}
+
+/// Show or hide the minimap.
+fn toggle_minimap(cx: &mut Context) {
+    run_typed(cx, "toggle minimap");
 }
 
 fn close_other_tabs(cx: &mut Context) {
