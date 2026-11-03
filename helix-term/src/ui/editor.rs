@@ -1363,6 +1363,46 @@ impl EditorView {
     }
 }
 
+/// Live Markdown: hide the syntax of every element the cursor is not in, for the views of the
+/// documents in live mode (and drop it where the mode is off).
+fn update_conceal(editor: &mut helix_view::Editor) {
+    use std::hash::{Hash, Hasher};
+    let views: Vec<(helix_view::ViewId, helix_view::DocumentId)> = editor.tree.views().map(|(v, _)| (v.id, v.doc)).collect();
+    for (view_id, doc_id) in views {
+        let Some(doc) = editor.documents.get_mut(&doc_id) else { continue };
+        if !doc.markdown_live || doc.language_name() != Some("markdown") {
+            if doc.conceal_key(view_id).is_some() {
+                doc.clear_conceal();
+            }
+            continue;
+        }
+        let text = doc.text().slice(..);
+        let cursors: Vec<usize> = doc.selection(view_id).ranges().iter().map(|r| r.cursor(text)).collect();
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (doc.version(), &cursors).hash(&mut hasher);
+        let key = hasher.finish();
+        if doc.conceal_key(view_id) == Some(key) {
+            continue;
+        }
+        let bytes: Vec<usize> = cursors.iter().map(|&c| text.char_to_byte(c)).collect();
+        let source = text.to_string();
+        let mut overlays: Vec<helix_core::text_annotations::Overlay> = Vec::new();
+        for c in pv::markdown::conceal(&source) {
+            if bytes.iter().any(|b| c.element.start <= *b && *b <= c.element.end) {
+                continue;
+            }
+            let first = text.byte_to_char(c.range.start);
+            let last = text.byte_to_char(c.range.end);
+            for (n, at) in (first..last).enumerate() {
+                overlays.push(helix_core::text_annotations::Overlay::new(at, if n == 0 { c.replace.unwrap_or("") } else { "" }));
+            }
+        }
+        overlays.sort_by_key(|o| o.char_idx);
+        overlays.dedup_by_key(|o| o.char_idx);
+        doc.set_conceal(view_id, key, overlays);
+    }
+}
+
 impl Component for EditorView {
     fn handle_event(
         &mut self,
@@ -1592,6 +1632,7 @@ impl Component for EditorView {
     }
 
     fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
+        update_conceal(cx.editor);
         // clear with background color
         surface.set_style(area, cx.editor.theme.get("ui.background"));
         let config = cx.editor.config();

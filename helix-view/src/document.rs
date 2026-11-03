@@ -150,6 +150,10 @@ pub struct Document {
     /// To know if they're up-to-date, check the `id` field in `DocumentInlayHints`.
     pub(crate) inlay_hints: HashMap<ViewId, DocumentInlayHints>,
     pub(crate) jump_labels: HashMap<ViewId, Vec<Overlay>>,
+    /// The Markdown syntax a live view hides, by view: the key it was made for and the overlays.
+    pub(crate) conceal: HashMap<ViewId, (u64, Vec<Overlay>)>,
+    /// Show Markdown rendered where the cursor is not (live mode) instead of its source.
+    pub markdown_live: bool,
     /// Set to `true` when the document is updated, reset to `false` on the next inlay hints
     /// update from the LSP
     pub inlay_hints_oudated: bool,
@@ -725,6 +729,8 @@ impl Document {
             focused_at: std::time::Instant::now(),
             readonly: false,
             jump_labels: HashMap::new(),
+            conceal: HashMap::new(),
+            markdown_live: false,
             color_swatches: None,
             color_swatch_controller: TaskController::new(),
             syn_loader,
@@ -1369,6 +1375,7 @@ impl Document {
         self.selections.remove(&view_id);
         self.inlay_hints.remove(&view_id);
         self.jump_labels.remove(&view_id);
+        self.conceal.remove(&view_id);
     }
 
     /// Apply a [`Transaction`] to the [`Document`] to change its text.
@@ -2263,6 +2270,20 @@ impl Document {
     /// Set the inlay hints for this document and `view_id`.
     pub fn set_inlay_hints(&mut self, view_id: ViewId, inlay_hints: DocumentInlayHints) {
         self.inlay_hints.insert(view_id, inlay_hints);
+    }
+
+    /// The key the hidden syntax of `view_id` was computed for, if there is any.
+    pub fn conceal_key(&self, view_id: ViewId) -> Option<u64> {
+        self.conceal.get(&view_id).map(|(k, _)| *k)
+    }
+
+    /// Hide (`""`) or replace the characters at these overlays in `view_id`, for `key`.
+    pub fn set_conceal(&mut self, view_id: ViewId, key: u64, overlays: Vec<Overlay>) {
+        self.conceal.insert(view_id, (key, overlays));
+    }
+
+    pub fn clear_conceal(&mut self) {
+        self.conceal.clear();
     }
 
     pub fn set_jump_labels(&mut self, view_id: ViewId, labels: Vec<Overlay>) {

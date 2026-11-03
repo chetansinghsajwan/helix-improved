@@ -467,7 +467,9 @@ impl MappableCommand {
         tab_picker, "Open tab picker",
         move_next_word_in_line, "Move to the next word, stopping at the end of the line",
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
-        markdown_preview, "Show the file rendered as Markdown",
+        markdown_preview, "Markdown preview mode: the file rendered, read only",
+        markdown_live, "Markdown live mode: rendered except where the cursor is",
+        markdown_source, "Markdown source mode: the file as written",
         keys_help, "Show the keys of the current mode",
         close_other_tabs, "Close all other tabs",
         format_document, "Format the file",
@@ -956,6 +958,24 @@ fn markdown_preview(cx: &mut Context) {
     let title = doc.path().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Preview".into());
     let source = doc.text().to_string();
     cx.push_layer(Box::new(ui::preview::MarkdownPreview::new(&title, source)));
+}
+
+/// Live mode: the Markdown file shows rendered except where the cursor is.
+fn markdown_live(cx: &mut Context) {
+    let (_view, doc) = current!(cx.editor);
+    if doc.language_name() != Some("markdown") {
+        cx.editor.set_error("not a Markdown file");
+        return;
+    }
+    doc.markdown_live = true;
+    cx.editor.set_status("Markdown: live");
+}
+
+/// Source mode: the Markdown file as written.
+fn markdown_source(cx: &mut Context) {
+    let (_view, doc) = current!(cx.editor);
+    doc.markdown_live = false;
+    cx.editor.set_status("Markdown: source");
 }
 
 fn close_other_tabs(cx: &mut Context) {
