@@ -10,6 +10,7 @@ pub mod dim;
 pub mod dock;
 pub mod git_panel;
 pub mod pick;
+pub mod minimap;
 pub mod preview;
 pub mod picker;
 pub mod popup;

@@ -132,6 +132,8 @@ pub struct View {
     /// the editor (the box border), not to the text: 1 for views at the bottom
     /// edge of a bordered editor area, else 0. Set by the editor view each frame.
     pub bottom_margin: u16,
+    /// Columns at the right edge that belong to the minimap, not to the text. Set by the editor view each frame.
+    pub minimap: u16,
     pub doc: DocumentId,
     pub jumps: JumpList,
     // documents accessed from this view from the oldest one to last viewed one
@@ -177,6 +179,7 @@ impl View {
             doc,
             area: Rect::default(), // will get calculated upon inserting into tree
             bottom_margin: 0,
+            minimap: 0,
             jumps: JumpList::new((doc, Selection::point(0))), // TODO: use actual sel
             docs_access_history: Vec::new(),
             last_modified_docs: [None, None],
@@ -195,7 +198,7 @@ impl View {
     }
 
     pub fn inner_area(&self, doc: &Document) -> Rect {
-        self.area.clip_left(self.gutter_offset(doc)).clip_bottom(1 + self.bottom_margin) // -1 for statusline
+        self.area.clip_left(self.gutter_offset(doc)).clip_right(self.minimap).clip_bottom(1 + self.bottom_margin) // -1 for statusline
     }
 
     pub fn inner_height(&self) -> usize {
@@ -203,7 +206,7 @@ impl View {
     }
 
     pub fn inner_width(&self, doc: &Document) -> u16 {
-        self.area.clip_left(self.gutter_offset(doc)).width
+        self.area.clip_left(self.gutter_offset(doc)).clip_right(self.minimap).width
     }
 
     pub fn gutters(&self) -> &[GutterType] {

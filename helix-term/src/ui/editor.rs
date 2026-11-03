@@ -1168,6 +1168,26 @@ impl EditorView {
             MouseEventKind::Down(MouseButton::Left) => {
                 let editor = &mut cxt.editor;
 
+                // A click in the minimap goes to that part of the file.
+                let hit = editor.tree.views().find_map(|(view, _)| {
+                    let r = super::minimap::rect(view)?;
+                    (column >= r.x && column < r.right() && row >= r.y && row < r.bottom()).then(|| (view.id, view.doc, r, view.inner_height()))
+                });
+                if let Some((view_id, doc_id, r, visible)) = hit {
+                    let doc = doc_mut!(editor, &doc_id);
+                    let text = doc.text();
+                    let total = text.len_lines().max(1);
+                    let first = text.char_to_line(doc.view_offset(view_id).anchor.min(text.len_chars()));
+                    let layout = super::minimap::Layout::new(total, first, visible, usize::from(r.height));
+                    let line = layout.line_at((usize::from(row - r.y)) * 4 + 2).min(total - 1);
+                    let pos = text.line_to_char(line);
+                    doc.set_selection(view_id, Selection::point(pos));
+                    editor.focus(view_id);
+                    let (view, doc) = current!(editor);
+                    helix_view::align_view(doc, view, helix_view::Align::Center);
+                    return EventResult::Consumed(None);
+                }
+
                 if let Some((pos, view_id)) = pos_and_view(editor, row, column, true) {
                     let prev_view_id = view!(editor).id;
                     let doc = doc_mut!(editor, &view!(editor, view_id).doc);
@@ -1682,6 +1702,17 @@ impl Component for EditorView {
         // if the terminal size suddenly changed, we need to trigger a resize
         cx.editor.resize(view_area);
 
+        // The minimap takes columns from the right of every view wide enough for it.
+        let want = if config.minimap { config.minimap_width.clamp(4, 40) } else { 0 };
+        let mut minimap_changed = false;
+        for (view, _) in cx.editor.tree.views_mut() {
+            let w = if want > 0 && view.area.width >= want * 3 + 20 { want + 1 } else { 0 };
+            if view.minimap != w {
+                view.minimap = w;
+                minimap_changed = true;
+            }
+        }
+
         // Views at the bottom edge leave the rows between text and status line to the box border and the bottom dock.
         let mut margins_changed = false;
         for (view, _) in cx.editor.tree.views_mut() {
@@ -1691,7 +1722,7 @@ impl Component for EditorView {
                 margins_changed = true;
             }
         }
-        if margins_changed {
+        if margins_changed || minimap_changed {
             let scrolloff = config.scrolloff;
             let helix_view::Editor { tree, documents, .. } = &mut *cx.editor;
             for (view, _) in tree.views_mut() {
@@ -1709,6 +1740,7 @@ impl Component for EditorView {
             let doc = cx.editor.document(view.doc).unwrap();
             // Splits are separated inside the editor area; its edges are not splits.
             self.render_view(cx.editor, doc, view, view_area, surface, is_focused);
+            super::minimap::render(cx.editor, doc, view, surface);
         }
 
         self.docks.render(&wb, surface, cx.editor);
