@@ -52,6 +52,8 @@ impl Component for MarkdownPreview {
                     compositor.pop();
                 })));
             }
+            KeyCode::Char('j') if ev.modifiers.contains(ratatui::crossterm::event::KeyModifiers::CONTROL) => self.scroll = (self.scroll + 5).min(last),
+            KeyCode::Char('k') if ev.modifiers.contains(ratatui::crossterm::event::KeyModifiers::CONTROL) => self.scroll = self.scroll.saturating_sub(5),
             KeyCode::Down | KeyCode::Char('j') => self.scroll = (self.scroll + 1).min(last),
             KeyCode::Up | KeyCode::Char('k') => self.scroll = self.scroll.saturating_sub(1),
             KeyCode::PageDown | KeyCode::Char(' ') => self.scroll = (self.scroll + page).min(last),
