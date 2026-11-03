@@ -21,11 +21,14 @@ pub struct MarkdownPreview {
     width: u16,
     scroll: usize,
     height: usize,
+    /// The folder relative image paths start from, and where the headings are (`]` and `[` jump).
+    base: Option<std::path::PathBuf>,
+    headings: Vec<usize>,
 }
 
 impl MarkdownPreview {
-    pub fn new(title: &str, source: String) -> Self {
-        MarkdownPreview { source, title: title.to_string(), theme: tui_design::Theme::load(), lines: Vec::new(), width: 0, scroll: 0, height: 10 }
+    pub fn new(title: &str, source: String, base: Option<std::path::PathBuf>) -> Self {
+        MarkdownPreview { source, title: title.to_string(), theme: tui_design::Theme::load(), lines: Vec::new(), width: 0, scroll: 0, height: 10, base, headings: Vec::new() }
     }
 }
 
@@ -53,6 +56,16 @@ impl Component for MarkdownPreview {
             KeyCode::Up | KeyCode::Char('k') => self.scroll = self.scroll.saturating_sub(1),
             KeyCode::PageDown | KeyCode::Char(' ') => self.scroll = (self.scroll + page).min(last),
             KeyCode::PageUp => self.scroll = self.scroll.saturating_sub(page),
+            KeyCode::Char(']') => {
+                if let Some(h) = self.headings.iter().find(|h| **h > self.scroll) {
+                    self.scroll = *h;
+                }
+            }
+            KeyCode::Char('[') => {
+                if let Some(h) = self.headings.iter().rev().find(|h| **h < self.scroll) {
+                    self.scroll = *h;
+                }
+            }
             KeyCode::Home | KeyCode::Char('g') => self.scroll = 0,
             KeyCode::End | KeyCode::Char('G') => self.scroll = last,
             _ => {}
@@ -70,7 +83,9 @@ impl Component for MarkdownPreview {
         let inner = pane.inner(r);
         pane.render(r, &mut buf);
         if self.width != inner.width {
-            self.lines = pv::markdown::render(&self.source, &self.theme, inner.width);
+            let r = pv::markdown::render_in(&self.source, &self.theme, inner.width, self.base.as_deref());
+            self.lines = r.lines;
+            self.headings = r.headings;
             self.width = inner.width;
         }
         self.height = usize::from(inner.height);
