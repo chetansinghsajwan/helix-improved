@@ -338,6 +338,8 @@ pub struct Config {
     pub minimap: bool,
     /// Its width in columns (each column is two dots wide). Defaults to `10`.
     pub minimap_width: u16,
+    /// Show a preview of the highlighted file beside the files pane while exploring it. Defaults to `true`.
+    pub dock_preview: bool,
     /// Vertical indent width guides.
     pub indent_guides: IndentGuidesConfig,
     /// Whether to color modes with different colors. Defaults to `false`.
@@ -1041,6 +1043,7 @@ impl Default for Config {
             bufferline: BufferLine::default(),
             minimap: true,
             minimap_width: 10,
+            dock_preview: true,
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,
             soft_wrap: SoftWrap {

@@ -470,6 +470,7 @@ impl MappableCommand {
         markdown_preview, "Markdown preview mode: the file rendered, read only",
         markdown_export_pdf, "Export the Markdown file as a PDF",
         toggle_minimap, "Show or hide the minimap",
+        toggle_dock_preview, "Show or hide the preview beside the files pane",
         markdown_live, "Markdown live mode: rendered except where the cursor is",
         markdown_source, "Markdown source mode: the file as written",
         keys_help, "Show the keys of the current mode",
@@ -990,6 +991,11 @@ fn markdown_export_pdf(cx: &mut Context) {
 /// Show or hide the minimap.
 fn toggle_minimap(cx: &mut Context) {
     run_typed(cx, "toggle minimap");
+}
+
+/// Show or hide the preview beside the files pane.
+fn toggle_dock_preview(cx: &mut Context) {
+    run_typed(cx, "toggle dock-preview");
 }
 
 fn close_other_tabs(cx: &mut Context) {

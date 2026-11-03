@@ -65,6 +65,10 @@ pub trait DockPanel {
     fn reveal(&mut self, _path: &Path) {}
     /// Reread what the panel shows (something changed on disk).
     fn refresh(&mut self) {}
+    /// The file or folder under the cursor, for the preview beside the dock.
+    fn preview_target(&self) -> Option<PathBuf> {
+        None
+    }
 }
 
 struct FilesDock(files::Panel, Option<tui_design::keys::Help>);
@@ -83,6 +87,10 @@ impl DockPanel for FilesDock {
 
     fn is_typing(&self) -> bool {
         self.0.is_typing() || self.1.is_some()
+    }
+
+    fn preview_target(&self) -> Option<PathBuf> {
+        self.0.current().map(Path::to_path_buf)
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
@@ -290,7 +298,11 @@ pub struct Docks {
     last: Option<DocksConfig>,
     /// The file the panels last followed (the focused editor's file).
     followed: Option<PathBuf>,
+    /// The preview beside the files pane: what it was made for, and its lines.
+    preview: Option<(PreviewKey, Vec<ratatui::text::Line<'static>>)>,
 }
+
+type PreviewKey = (PathBuf, u16, u16, bool);
 
 impl Docks {
     pub fn theme(&mut self) -> &tui_design::Theme {
@@ -430,6 +442,9 @@ impl Docks {
             d.draw_tabs(&mut buf, local, &theme);
             copy(&buf, from_ratatui(rect), surface);
         }
+        if editor.config().dock_preview {
+            self.render_preview(wb, surface, &theme, &root);
+        }
     }
 
     /// Every created panel rereads what it shows.
@@ -517,5 +532,54 @@ pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::
             dst.set_symbol(sym);
             dst.fg = fg;
         }
+    }
+}
+
+impl Docks {
+    /// While the files pane has the keyboard, a preview of the highlighted file fills the part of the
+    /// editor next to it (the pane's own width stays small).
+    fn render_preview(&mut self, wb: &tui_design::layout::Workbench, surface: &mut Surface, theme: &tui_design::Theme, root: &Path) {
+        let mut target = None;
+        for (side, rect) in [(Side::Left, wb.left), (Side::Right, wb.right)] {
+            let d = self.dock(side);
+            if !d.shown() || !d.focused {
+                continue;
+            }
+            if let Some(panel) = d.active_panel(root) {
+                if let Some(path) = panel.preview_target() {
+                    target = Some((side, rect, path));
+                }
+            }
+        }
+        let Some((side, dock, path)) = target else { return };
+        let editor = wb.editor;
+        // Half of the editor, at least 36 columns, next to the dock.
+        let width = (editor.width / 2).max(36).min(editor.width);
+        if editor.width < 50 || editor.height < 6 {
+            return;
+        }
+        let area = match side {
+            Side::Left => RRect::new(dock.right(), editor.y, width, editor.height),
+            _ => RRect::new(dock.x.saturating_sub(width), editor.y, width, editor.height),
+        };
+        let local = RRect::new(0, 0, area.width, area.height);
+        let mut buf = RBuffer::empty(local);
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let icon = if path.is_dir() { tui_design::icons::dir(&name, false) } else { tui_design::icons::file(&name, false) };
+        let pane = tui_design::Pane::new(theme).title(&name).icon(icon);
+        let inner = pane.inner(local);
+        pane.render(local, &mut buf);
+        if inner.width > 0 && inner.height > 0 {
+            let key: PreviewKey = (path.clone(), inner.width, inner.height, pv::raw_tables());
+            if self.preview.as_ref().map(|p| &p.0) != Some(&key) {
+                let opts = pv::Options { width: Some(inner.width), height: Some(inner.height), git: true, focus: None };
+                let lines = pv::preview(&path, theme, &opts).unwrap_or_else(|e| vec![ratatui::text::Line::from(ratatui::text::Span::styled(e.to_string(), RStyle::new().fg(theme.colors.muted.into())))]);
+                self.preview = Some((key, lines));
+            }
+            if let Some((_, lines)) = &self.preview {
+                ratatui::widgets::Paragraph::new(lines.clone()).render(inner, &mut buf);
+            }
+        }
+        copy(&buf, from_ratatui(area), surface);
     }
 }
