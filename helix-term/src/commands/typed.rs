@@ -546,23 +546,21 @@ fn format(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyh
 }
 
 /// Export the buffer as Markdown to a PDF next to the file (or the path given), without blocking the editor.
-fn markdown_export(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
-    if event != PromptEvent::Validate {
-        return Ok(());
-    }
-    let doc = doc!(cx.editor);
+/// `settings` are `mdexport` options (`--font`, `--paper`, ...); with none, its defaults apply.
+pub fn start_markdown_export(editor: &mut Editor, jobs: &mut crate::job::Jobs, out: Option<std::path::PathBuf>, settings: Vec<String>) -> anyhow::Result<()> {
+    let doc = doc!(editor);
     let Some(path) = doc.path().cloned() else {
         anyhow::bail!("save the buffer first: the PDF is named after the file")
     };
     let text = doc.text().to_string();
-    let out = args.first().map(std::path::PathBuf::from).unwrap_or_else(|| path.with_extension("pdf"));
+    let out = out.unwrap_or_else(|| path.with_extension("pdf"));
     let base = path.parent().map(|p| p.to_path_buf());
-    cx.editor.set_status(format!("exporting {} …", out.display()));
-    cx.jobs.callback(async move {
+    editor.set_status(format!("exporting {} …", out.display()));
+    jobs.callback(async move {
         let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
             use std::io::Write;
             let mut cmd = std::process::Command::new("mdexport");
-            cmd.arg("-").arg("-o").arg(&out);
+            cmd.arg("-").arg("-o").arg(&out).args(&settings);
             if let Some(b) = &base {
                 cmd.arg("--base").arg(b);
             }
@@ -584,6 +582,14 @@ fn markdown_export(cx: &mut compositor::Context, args: Args, event: PromptEvent)
         Ok(call)
     });
     Ok(())
+}
+
+/// `:markdown-export [path]`: export with the default settings (`Space m e` asks for them first).
+fn markdown_export(cx: &mut compositor::Context, args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    start_markdown_export(cx.editor, cx.jobs, args.first().map(std::path::PathBuf::from), Vec::new())
 }
 
 fn set_indent_style(
@@ -2890,7 +2896,7 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
     TypableCommand {
         name: "markdown-export",
         aliases: &["md-export"],
-        doc: "Export the buffer as a PDF (next to the file, or at the given path); needs the mdexport tool.",
+        doc: "Export the buffer as a PDF with the default settings (next to the file, or at the given path); Space m e asks for the settings. Needs the mdexport tool.",
         fun: markdown_export,
         completer: CommandCompleter::none(),
         signature: Signature {

@@ -150,3 +150,114 @@ impl Component for KeysHelp {
         (None, CursorKind::Hidden)
     }
 }
+
+/// The settings of a PDF export, chosen in a popup: paper, fonts, size, margin and layout. What is
+/// preselected is what `mdexport` would use (its config file, which Nix fills with the stylix fonts).
+pub struct ExportOptions {
+    multi: tui_design::multi::Multi,
+    theme: tui_design::Theme,
+}
+
+impl ExportOptions {
+    /// The popup, or why it cannot be made (the `mdexport` tool is missing).
+    pub fn new() -> Result<Self, String> {
+        use tui_design::multi::{Kind, Multi, Section};
+        let run = |arg: &str| -> Result<String, String> {
+            let out = std::process::Command::new("mdexport").arg(arg).output().map_err(|e| format!("mdexport: {e}"))?;
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        };
+        let defaults = run("--defaults")?;
+        let get = |key: &str| defaults.lines().find_map(|l| l.strip_prefix(&format!("{key}="))).unwrap_or("").to_string();
+        let mut fonts: Vec<String> = run("--fonts")?.lines().map(str::to_string).collect();
+        for want in [get("font"), get("mono")] {
+            if !want.is_empty() && !fonts.contains(&want) {
+                fonts.insert(0, want);
+            }
+        }
+        let one = |title: &str, items: Vec<String>, chosen: String| {
+            let mut items = items;
+            if !items.contains(&chosen) {
+                items.insert(0, chosen.clone());
+            }
+            Section::new(title, Kind::One, items, vec![chosen])
+        };
+        let list = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let mut layout = Vec::new();
+        if get("justify") == "true" {
+            layout.push("justify text".to_string());
+        }
+        if get("numbers") == "true" {
+            layout.push("page numbers".to_string());
+        }
+        let sections = vec![
+            one("Paper", list(&["a4", "letter"]), get("paper")),
+            one("Font", fonts.clone(), get("font")),
+            one("Code font", fonts, get("mono")),
+            one("Size", list(&["9", "10", "11", "12", "14"]), get("size")),
+            one("Margin", list(&["1.5", "2", "2.2", "2.5", "3"]), get("margin")),
+            Section::new("Layout", Kind::Many, list(&["justify text", "page numbers"]), layout),
+        ];
+        Ok(ExportOptions { multi: Multi::new("Export PDF", sections), theme: tui_design::Theme::load() })
+    }
+
+    /// The `mdexport` arguments for what is chosen.
+    fn args(&self) -> Vec<String> {
+        let one = |title: &str| self.multi.chosen(title).first().cloned();
+        let layout = self.multi.chosen("Layout");
+        let mut args = Vec::new();
+        for (flag, title) in [("--paper", "Paper"), ("--font", "Font"), ("--mono", "Code font"), ("--size", "Size"), ("--margin", "Margin")] {
+            if let Some(v) = one(title) {
+                args.push(flag.to_string());
+                args.push(v);
+            }
+        }
+        if !layout.iter().any(|l| l == "justify text") {
+            args.push("--no-justify".into());
+        }
+        if !layout.iter().any(|l| l == "page numbers") {
+            args.push("--no-numbers".into());
+        }
+        args
+    }
+}
+
+impl Component for ExportOptions {
+    fn dims_background(&self) -> bool {
+        true
+    }
+
+    fn handle_event(&mut self, event: &Event, _cx: &mut Context) -> EventResult {
+        let Event::Key(key) = event else {
+            return EventResult::Ignored(None);
+        };
+        let Some(ev) = to_crossterm(key) else {
+            return EventResult::Consumed(None);
+        };
+        match self.multi.key(&ev) {
+            tui_design::multi::Outcome::Open => EventResult::Consumed(None),
+            tui_design::multi::Outcome::Cancel => EventResult::Consumed(Some(Box::new(|compositor, _| {
+                compositor.pop();
+            }))),
+            tui_design::multi::Outcome::Apply => {
+                let args = self.args();
+                EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+                    compositor.pop();
+                    if let Err(e) = crate::commands::typed::start_markdown_export(cx.editor, cx.jobs, None, args) {
+                        cx.editor.set_error(e.to_string());
+                    }
+                })))
+            }
+        }
+    }
+
+    fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
+        let full = RRect::new(area.x, area.y, area.width, area.height);
+        let mut buf = RBuffer::empty(full);
+        self.multi.render(full, &mut buf, &self.theme);
+        copy(&buf, area, surface);
+    }
+
+    fn cursor(&self, _area: Rect, _editor: &helix_view::Editor) -> (Option<helix_core::Position>, CursorKind) {
+        (None, CursorKind::Hidden)
+    }
+}

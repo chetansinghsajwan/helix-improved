@@ -980,7 +980,10 @@ fn markdown_source(cx: &mut Context) {
 }
 
 fn markdown_export_pdf(cx: &mut Context) {
-    run_typed(cx, "markdown-export");
+    match ui::preview::ExportOptions::new() {
+        Ok(popup) => cx.push_layer(Box::new(popup)),
+        Err(e) => cx.editor.set_error(e),
+    }
 }
 
 fn close_other_tabs(cx: &mut Context) {
