@@ -148,6 +148,9 @@ FLAGS:
     });
 
     // TODO: use the thread local executor to spawn the application task separately from the work pool
+    for problem in tui_design::config::init("hx-ui") {
+        eprintln!("hx-ui: {problem}");
+    }
     let mut app = Application::new(args, config, lang_loader).context("unable to start Helix")?;
 
     let exit_code = app.run(&mut EventStream::new()).await?;
