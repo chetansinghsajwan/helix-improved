@@ -957,7 +957,7 @@ fn markdown_preview(cx: &mut Context) {
     let (_view, doc) = current_ref!(cx.editor);
     let title = doc.path().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Preview".into());
     let source = doc.text().to_string();
-    cx.push_layer(Box::new(ui::preview::MarkdownPreview::new(&title, source)));
+    cx.push_layer(Box::new(ui::preview::MarkdownPreview::new(&title, source, doc.path().and_then(|p| p.parent()).map(|p| p.to_path_buf()))));
 }
 
 /// Live mode: the Markdown file shows rendered except where the cursor is.
