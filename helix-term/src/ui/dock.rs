@@ -558,7 +558,7 @@ pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::
 impl Docks {
     /// While the files pane has the keyboard, a preview of the highlighted file fills the part of the
     /// editor next to it (the pane's own width stays small).
-    /// Drawn last, over the editor (below its tabs), so nothing dims or covers it. `view` is the text area of the editor.
+    /// Drawn last, over the editor, so nothing dims or covers it. `view` is the inside of the editor box: the pane is as tall as it.
     pub fn render_preview(&mut self, wb: &tui_design::layout::Workbench, view: Rect, surface: &mut Surface, editor: &Editor) {
         if !editor.config().dock_preview {
             return;
