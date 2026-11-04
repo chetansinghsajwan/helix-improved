@@ -322,6 +322,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             },
             "H" => keys_help,
             "M" => toggle_minimap,
+            "W" => toggle_soft_wrap,
             "V" => toggle_dock_preview,
             "i" => { "Indent"
                 "2" => indent_2_spaces,

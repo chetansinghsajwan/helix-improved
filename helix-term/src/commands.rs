@@ -470,6 +470,7 @@ impl MappableCommand {
         markdown_preview, "Markdown preview mode: the file rendered, read only",
         markdown_export_pdf, "Export the Markdown file as a PDF",
         toggle_minimap, "Show or hide the minimap",
+        toggle_soft_wrap, "Wrap long lines (soft wrap) or not",
         toggle_dock_preview, "Show or hide the preview beside the files pane",
         markdown_live, "Markdown live mode: rendered except where the cursor is",
         markdown_source, "Markdown source mode: the file as written",
@@ -1021,6 +1022,11 @@ fn move_tab_left(cx: &mut Context) {
 
 fn move_tab_right(cx: &mut Context) {
     run_typed(cx, "tab-move-right");
+}
+
+/// Wrap long lines at the edge of the view, or let them run off it.
+fn toggle_soft_wrap(cx: &mut Context) {
+    run_typed(cx, "toggle soft-wrap.enable");
 }
 
 fn close_other_tabs(cx: &mut Context) {
