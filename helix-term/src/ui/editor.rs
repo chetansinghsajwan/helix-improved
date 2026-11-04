@@ -671,7 +671,7 @@ impl EditorView {
         let scratch = PathBuf::from(SCRATCH_BUFFER_NAME);
         let current = view!(editor).doc;
         let mut active = 0;
-        let docs: Vec<_> = editor.documents().collect();
+        let docs: Vec<_> = editor.tabs().into_iter().filter_map(|id| editor.document(id)).collect();
         let paths: Vec<&std::path::Path> = docs.iter().map(|d| d.path().map(|p| p.as_path()).unwrap_or(&scratch)).collect();
         // Equal file names get just enough parent folders to tell them apart.
         let titles = tui_design::tabs::short_titles(&paths);

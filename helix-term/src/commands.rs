@@ -475,6 +475,11 @@ impl MappableCommand {
         markdown_source, "Markdown source mode: the file as written",
         keys_help, "Show the keys of the current mode",
         close_other_tabs, "Close all other tabs",
+        close_tab, "Close this tab",
+        close_next_tabs, "Close all the tabs to the right",
+        close_prev_tabs, "Close all the tabs to the left",
+        move_tab_left, "Move this tab to the left",
+        move_tab_right, "Move this tab to the right",
         format_document, "Format the file",
         indent_2_spaces, "Indent with 2 spaces",
         indent_4_spaces, "Indent with 4 spaces",
@@ -998,6 +1003,26 @@ fn toggle_dock_preview(cx: &mut Context) {
     run_typed(cx, "toggle dock-preview");
 }
 
+fn close_tab(cx: &mut Context) {
+    run_typed(cx, "buffer-close");
+}
+
+fn close_next_tabs(cx: &mut Context) {
+    run_typed(cx, "buffer-close-next");
+}
+
+fn close_prev_tabs(cx: &mut Context) {
+    run_typed(cx, "buffer-close-prev");
+}
+
+fn move_tab_left(cx: &mut Context) {
+    run_typed(cx, "tab-move-left");
+}
+
+fn move_tab_right(cx: &mut Context) {
+    run_typed(cx, "tab-move-right");
+}
+
 fn close_other_tabs(cx: &mut Context) {
     run_typed(cx, "buffer-close-others");
 }
@@ -1024,7 +1049,7 @@ fn indent_tabs(cx: &mut Context) {
 
 /// Switch to tab `n` (0-based), in the order the tab strip shows them.
 fn goto_tab(editor: &mut Editor, n: usize) {
-    match editor.documents.keys().nth(n).copied() {
+    match editor.tabs().get(n).copied() {
         Some(id) => editor.switch(id, Action::Replace),
         None => editor.set_error(format!("no tab {}", n + 1)),
     }
@@ -1040,22 +1065,17 @@ fn goto_buffer(editor: &mut Editor, direction: Direction, count: usize) {
 
     let id = match direction {
         Direction::Forward => {
-            let iter = editor.documents.keys();
-            // skip 'count' times past current buffer
-            iter.cycle().skip_while(|id| *id != &current).nth(count)
+            let tabs = editor.tabs();
+            // skip `count` times past current buffer
+            tabs.into_iter().cycle().skip_while(|id| *id != current).nth(count)
         }
         Direction::Backward => {
-            let iter = editor.documents.keys();
-            // skip 'count' times past current buffer
-            iter.rev()
-                .cycle()
-                .skip_while(|id| *id != &current)
-                .nth(count)
+            let tabs = editor.tabs();
+            // skip `count` times past current buffer
+            tabs.into_iter().rev().cycle().skip_while(|id| *id != current).nth(count)
         }
     }
     .unwrap();
-
-    let id = *id;
 
     editor.switch(id, Action::Replace);
 }
