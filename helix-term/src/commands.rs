@@ -472,8 +472,8 @@ impl MappableCommand {
         toggle_minimap, "Show or hide the minimap",
         toggle_soft_wrap, "Wrap long lines (soft wrap) or not",
         toggle_dock_preview, "Show or hide the preview beside the files pane",
-        markdown_live, "Markdown live mode: rendered except where the cursor is",
-        markdown_source, "Markdown source mode: the file as written",
+        markdown_live, "Live mode: Markdown rendered except at the cursor, tables with aligned columns",
+        markdown_source, "Source mode: the file as written",
         keys_help, "Show the keys of the current mode",
         close_other_tabs, "Close all other tabs",
         close_tab, "Close this tab",
@@ -972,19 +972,27 @@ fn markdown_preview(cx: &mut Context) {
 /// Live mode: the Markdown file shows rendered except where the cursor is.
 fn markdown_live(cx: &mut Context) {
     let (_view, doc) = current!(cx.editor);
-    if doc.language_name() != Some("markdown") {
-        cx.editor.set_error("not a Markdown file");
-        return;
+    if ui::table::delimiter(doc.path().map(|p| p.as_path())).is_some() {
+        doc.table_live = true;
+        cx.editor.set_status("table: live (columns aligned)");
+    } else if doc.language_name() != Some("markdown") {
+        cx.editor.set_error("not a Markdown or table file");
+    } else {
+        doc.markdown_live = true;
+        cx.editor.set_status("Markdown: live");
     }
-    doc.markdown_live = true;
-    cx.editor.set_status("Markdown: live");
 }
 
 /// Source mode: the Markdown file as written.
 fn markdown_source(cx: &mut Context) {
     let (_view, doc) = current!(cx.editor);
-    doc.markdown_live = false;
-    cx.editor.set_status("Markdown: source");
+    if ui::table::delimiter(doc.path().map(|p| p.as_path())).is_some() {
+        doc.table_live = false;
+        cx.editor.set_status("table: source");
+    } else {
+        doc.markdown_live = false;
+        cx.editor.set_status("Markdown: source");
+    }
 }
 
 fn markdown_export_pdf(cx: &mut Context) {
