@@ -307,6 +307,11 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
                 "p" => goto_previous_tab,
                 "l" => tab_picker,
                 "o" => close_other_tabs,
+                "c" => close_tab,
+                ">" => close_next_tabs,
+                "<" => close_prev_tabs,
+                "[" => move_tab_left,
+                "]" => move_tab_right,
             },
             "=" => format_document,
             "m" => { "Markdown"

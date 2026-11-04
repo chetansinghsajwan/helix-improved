@@ -278,6 +278,55 @@ fn force_buffer_close_others(
     buffer_close_by_ids_impl(cx, &document_ids, true)
 }
 
+/// The tabs after (or before) the current one, in tab order.
+fn tabs_beside(editor: &Editor, after: bool) -> Vec<DocumentId> {
+    let current = view!(editor).doc;
+    let tabs = editor.tabs();
+    let at = tabs.iter().position(|id| *id == current).unwrap_or(0);
+    if after { tabs[at + 1..].to_vec() } else { tabs[..at].to_vec() }
+}
+
+/// Close every tab to the right of the current one.
+fn buffer_close_next(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    let ids = tabs_beside(cx.editor, true);
+    buffer_close_by_ids_impl(cx, &ids, false)
+}
+
+/// Close every tab to the left of the current one.
+fn buffer_close_prev(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    let ids = tabs_beside(cx.editor, false);
+    buffer_close_by_ids_impl(cx, &ids, false)
+}
+
+/// Move the current tab one place left or right.
+fn tab_move(cx: &mut compositor::Context, delta: isize) -> anyhow::Result<()> {
+    let id = view!(cx.editor).doc;
+    if !cx.editor.move_tab(id, delta) {
+        cx.editor.set_status(if delta < 0 { "already the first tab" } else { "already the last tab" });
+    }
+    Ok(())
+}
+
+fn tab_move_left(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    tab_move(cx, -1)
+}
+
+fn tab_move_right(cx: &mut compositor::Context, _args: Args, event: PromptEvent) -> anyhow::Result<()> {
+    if event != PromptEvent::Validate {
+        return Ok(());
+    }
+    tab_move(cx, 1)
+}
+
 fn buffer_gather_all_impl(editor: &mut Editor) -> Vec<DocumentId> {
     editor.documents().map(|doc| doc.id()).collect()
 }
@@ -2773,6 +2822,38 @@ pub const TYPABLE_COMMAND_LIST: &[TypableCommand] = &[
             positionals: (0, None),
             ..Signature::DEFAULT
         },
+    },
+    TypableCommand {
+        name: "buffer-close-next",
+        aliases: &["bcn"],
+        doc: "Close all the tabs to the right of the current one.",
+        fun: buffer_close_next,
+        completer: CommandCompleter::none(),
+        signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT },
+    },
+    TypableCommand {
+        name: "buffer-close-prev",
+        aliases: &["bcp"],
+        doc: "Close all the tabs to the left of the current one.",
+        fun: buffer_close_prev,
+        completer: CommandCompleter::none(),
+        signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT },
+    },
+    TypableCommand {
+        name: "tab-move-left",
+        aliases: &["tml"],
+        doc: "Move the current tab one place to the left.",
+        fun: tab_move_left,
+        completer: CommandCompleter::none(),
+        signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT },
+    },
+    TypableCommand {
+        name: "tab-move-right",
+        aliases: &["tmr"],
+        doc: "Move the current tab one place to the right.",
+        fun: tab_move_right,
+        completer: CommandCompleter::none(),
+        signature: Signature { positionals: (0, Some(0)), ..Signature::DEFAULT },
     },
     TypableCommand {
         name: "buffer-close-others",

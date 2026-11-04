@@ -1105,6 +1105,8 @@ pub struct Editor {
     pub tree: Tree,
     pub next_document_id: DocumentId,
     pub documents: BTreeMap<DocumentId, Document>,
+    /// The order of the tabs: the buffers in the order the tab strip shows them (new ones go last).
+    pub tab_order: Vec<DocumentId>,
 
     // We Flatten<> to resolve the inner DocumentSavedEventFuture. For that we need a stream of streams, hence the Once<>.
     // https://stackoverflow.com/a/66875668
@@ -1255,6 +1257,7 @@ impl Editor {
             tree: Tree::new(area),
             next_document_id: DocumentId::default(),
             documents: BTreeMap::new(),
+            tab_order: Vec::new(),
             saves: HashMap::new(),
             save_queue: SelectAll::new(),
             write_count: 0,
@@ -2066,6 +2069,27 @@ impl Editor {
     #[inline]
     pub fn documents(&self) -> impl Iterator<Item = &Document> {
         self.documents.values()
+    }
+
+    /// The documents in tab order: the order they were moved to, buffers that are new after them.
+    pub fn tabs(&self) -> Vec<DocumentId> {
+        let mut order: Vec<DocumentId> = self.tab_order.iter().copied().filter(|id| self.documents.contains_key(id)).collect();
+        let missing: Vec<DocumentId> = self.documents.keys().copied().filter(|id| !order.contains(id)).collect();
+        order.extend(missing);
+        order
+    }
+
+    /// Move the tab of `id` one place left (`-1`) or right (`1`); false at the ends.
+    pub fn move_tab(&mut self, id: DocumentId, delta: isize) -> bool {
+        let mut order = self.tabs();
+        let Some(at) = order.iter().position(|i| *i == id) else { return false };
+        let to = at as isize + delta;
+        if to < 0 || to as usize >= order.len() {
+            return false;
+        }
+        order.swap(at, to as usize);
+        self.tab_order = order;
+        true
     }
 
     #[inline]
