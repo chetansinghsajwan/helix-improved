@@ -469,6 +469,16 @@ impl MappableCommand {
         move_prev_word_in_line, "Move to the previous word, stopping at the start of the line",
         markdown_preview, "Markdown preview mode: the file rendered, read only",
         markdown_export_pdf, "Export the Markdown file as a PDF",
+        table_next_cell, "Table: the next cell",
+        table_prev_cell, "Table: the previous cell",
+        table_cell_below, "Table: the cell below",
+        table_cell_above, "Table: the cell above",
+        table_sort, "Table: sort the rows by this column",
+        table_sort_desc, "Table: sort the rows by this column, largest first",
+        table_add_column, "Table: add a column after this one",
+        table_delete_column, "Table: delete this column",
+        table_move_column_left, "Table: move this column left",
+        table_move_column_right, "Table: move this column right",
         toggle_minimap, "Show or hide the minimap",
         toggle_soft_wrap, "Wrap long lines (soft wrap) or not",
         toggle_dock_preview, "Show or hide the preview beside the files pane",
@@ -7292,4 +7302,112 @@ fn jump_to_word(cx: &mut Context, behaviour: Movement) {
         }
     }
     jump_to_label(cx, words, behaviour)
+}
+
+// Tables (csv, tsv, psv): cell motions and column operations on the text of the buffer.
+
+/// Run `f` on the table of the current buffer; it returns the cell the cursor goes to. The buffer text
+/// is replaced only when the table changed, as one undoable change.
+fn table_edit(cx: &mut Context, f: impl FnOnce(&mut tb::table::Table, (usize, usize)) -> (usize, usize)) {
+    let (view, doc) = current!(cx.editor);
+    let Some(delim) = doc.path().and_then(|p| tb::table::delimiter(p)) else {
+        cx.editor.set_error("not a csv, tsv or psv file");
+        return;
+    };
+    let text = doc.text().to_string();
+    let mut table = tb::table::Table::parse(&text, delim);
+    let cursor = doc.selection(view.id).primary().cursor(doc.text().slice(..));
+    let cell = table.cell_at(cursor);
+    let before = table.clone();
+    let (r, c) = f(&mut table, cell);
+    if table != before {
+        let new = table.to_text();
+        let len = doc.text().len_chars();
+        let tx = Transaction::change(doc.text(), std::iter::once((0, len, Some(Tendril::from(new.as_str())))));
+        doc.apply(&tx, view.id);
+        doc.append_changes_to_history(view);
+    }
+    let at = table.char_offset(r, c).min(doc.text().len_chars());
+    doc.set_selection(view.id, Selection::point(at));
+}
+
+fn table_move(cx: &mut Context, dr: isize, dc: isize) {
+    table_edit(cx, |t, (r, c)| {
+        let rows = t.row_count().max(1) as isize;
+        let cols = t.col_count().max(1) as isize;
+        // Past the end of a row, the next cell is the first of the next row (and back).
+        let (mut r, mut c) = (r as isize + dr, c as isize + dc);
+        if c >= cols && r + 1 < rows && dr == 0 {
+            c = 0;
+            r += 1;
+        } else if c < 0 && r > 0 && dr == 0 {
+            c = cols - 1;
+            r -= 1;
+        }
+        (r.clamp(0, rows - 1) as usize, c.clamp(0, cols - 1) as usize)
+    });
+}
+
+fn table_next_cell(cx: &mut Context) {
+    table_move(cx, 0, 1)
+}
+
+fn table_prev_cell(cx: &mut Context) {
+    table_move(cx, 0, -1)
+}
+
+fn table_cell_below(cx: &mut Context) {
+    table_move(cx, 1, 0)
+}
+
+fn table_cell_above(cx: &mut Context) {
+    table_move(cx, -1, 0)
+}
+
+fn table_sort(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        t.sort_by(c, false, true);
+        (r.min(t.row_count().saturating_sub(1)), c)
+    });
+}
+
+fn table_sort_desc(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        t.sort_by(c, true, true);
+        (r.min(t.row_count().saturating_sub(1)), c)
+    });
+}
+
+fn table_add_column(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        t.insert_col(c + 1);
+        (r, c + 1)
+    });
+}
+
+fn table_delete_column(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        t.delete_col(c);
+        (r, c.min(t.col_count().saturating_sub(1)))
+    });
+}
+
+fn table_move_column_left(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        if c == 0 {
+            return (r, c);
+        }
+        t.move_col(c, c - 1);
+        (r, c - 1)
+    });
+}
+
+fn table_move_column_right(cx: &mut Context) {
+    table_edit(cx, |t, (r, c)| {
+        if c + 1 >= t.col_count() {
+            return (r, c);
+        }
+        t.move_col(c, c + 1);
+        (r, c + 1)
+    });
 }

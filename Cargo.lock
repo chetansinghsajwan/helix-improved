@@ -3088,6 +3088,7 @@ dependencies = [
  "signal-hook-tokio",
  "smallvec",
  "symbols-panel",
+ "tb",
  "tempfile",
  "termini",
  "thiserror 2.0.12",
@@ -5223,6 +5224,17 @@ dependencies = [
  "thiserror 2.0.12",
  "walkdir",
  "yaml-rust",
+]
+
+[[package]]
+name = "tb"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "ratatui",
+ "tui-input",
+ "ui",
+ "unicode-width 0.2.3",
 ]
 
 [[package]]
