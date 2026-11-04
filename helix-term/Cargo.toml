@@ -62,6 +62,7 @@ pv = { path = "../tuikit/crates/pv" }
 files = { path = "../tuikit/crates/files" }
 git-panel = { path = "../tuikit/crates/git-panel" }
 diagnostics-panel = { path = "../tuikit/crates/diagnostics-panel" }
+symbols-panel = { path = "../tuikit/crates/symbols-panel" }
 tui-design = { path = "../tuikit/crates/ui", package = "ui" }
 ratatui = "0.30"
 crossterm = { version = "0.28", features = ["event-stream"] }

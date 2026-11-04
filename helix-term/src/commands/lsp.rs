@@ -1397,3 +1397,80 @@ fn compute_inlay_hints_for_view(
 
     Some(callback)
 }
+
+/// The symbols of the document as a tree, from the first language server that has them (what the symbol
+/// explorer shows). `None` when no server can.
+pub fn document_symbol_tree(doc: &Document) -> Option<impl Future<Output = anyhow::Result<Vec<symbols_panel::Symbol>>>> {
+    use symbols_panel::{Kind, Symbol};
+
+    fn kind(k: lsp::SymbolKind) -> Kind {
+        match k {
+            lsp::SymbolKind::MODULE | lsp::SymbolKind::NAMESPACE | lsp::SymbolKind::PACKAGE | lsp::SymbolKind::FILE => Kind::Module,
+            lsp::SymbolKind::CLASS => Kind::Class,
+            lsp::SymbolKind::STRUCT => Kind::Struct,
+            lsp::SymbolKind::INTERFACE => Kind::Interface,
+            lsp::SymbolKind::ENUM | lsp::SymbolKind::ENUM_MEMBER => Kind::Enum,
+            lsp::SymbolKind::FUNCTION => Kind::Function,
+            lsp::SymbolKind::METHOD => Kind::Method,
+            lsp::SymbolKind::CONSTRUCTOR => Kind::Constructor,
+            lsp::SymbolKind::FIELD | lsp::SymbolKind::PROPERTY => Kind::Field,
+            lsp::SymbolKind::VARIABLE => Kind::Variable,
+            lsp::SymbolKind::CONSTANT => Kind::Constant,
+            lsp::SymbolKind::TYPE_PARAMETER => Kind::TypeParameter,
+            _ => Kind::Other,
+        }
+    }
+
+    fn nested(s: lsp::DocumentSymbol) -> Symbol {
+        Symbol {
+            name: s.name,
+            detail: s.detail.unwrap_or_default(),
+            kind: kind(s.kind),
+            line: s.selection_range.start.line,
+            col: s.selection_range.start.character,
+            end_line: s.range.end.line,
+            children: s.children.unwrap_or_default().into_iter().map(nested).collect(),
+        }
+    }
+
+    /// Symbols with the name of their container, as a tree: a symbol goes under the nearest earlier one with that name.
+    fn nest(flat: Vec<(Option<String>, Symbol)>) -> Vec<Symbol> {
+        let n = flat.len();
+        let mut parent: Vec<Option<usize>> = vec![None; n];
+        for i in 0..n {
+            if let Some(c) = &flat[i].0 {
+                parent[i] = (0..i).rev().find(|&j| flat[j].1.name == *c);
+            }
+        }
+        let mut nodes: Vec<Option<Symbol>> = flat.into_iter().map(|(_, s)| Some(s)).collect();
+        let mut roots = Vec::new();
+        for i in (0..n).rev() {
+            let s = nodes[i].take().expect("each node once");
+            match parent[i] {
+                Some(p) => nodes[p].as_mut().expect("the parent comes first").children.insert(0, s),
+                None => roots.insert(0, s),
+            }
+        }
+        roots
+    }
+
+    let language_server = doc.language_servers_with_feature(LanguageServerFeature::DocumentSymbols).next()?;
+    let request = language_server.document_symbols(doc.identifier())?;
+    Some(async move {
+        Ok(match request.await? {
+            None => Vec::new(),
+            Some(lsp::DocumentSymbolResponse::Nested(list)) => list.into_iter().map(nested).collect(),
+            Some(lsp::DocumentSymbolResponse::Flat(list)) => {
+                // A flat list names the container of each symbol: put the symbols inside the one it names.
+                let flat: Vec<(Option<String>, Symbol)> = list
+                    .into_iter()
+                    .map(|s| {
+                        let sym = Symbol { name: s.name, detail: String::new(), kind: kind(s.kind), line: s.location.range.start.line, col: s.location.range.start.character, end_line: s.location.range.end.line, children: Vec::new() };
+                        (s.container_name.filter(|c| !c.is_empty()), sym)
+                    })
+                    .collect();
+                nest(flat)
+            }
+        })
+    })
+}

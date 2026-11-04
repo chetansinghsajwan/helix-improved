@@ -46,6 +46,9 @@ pub struct EditorView {
     terminal_focused: bool,
     /// The left, right and bottom docks and the panels in them.
     docks: super::dock::Docks,
+    /// What the symbol explorer was last asked for: the document and its version, and when.
+    symbols_key: Option<(helix_view::DocumentId, i32)>,
+    symbols_at: std::time::Instant,
     /// Where the status line may run under the side docks, see `render`.
     ribbon: Ribbon,
 }
@@ -75,6 +78,43 @@ pub enum InsertEvent {
 }
 
 impl EditorView {
+    /// While a symbol explorer is on screen: ask the language server for the symbols of the focused file when it
+    /// changes (at most every 400 ms while typing), and tell the explorer where the cursor is.
+    fn request_symbols(&mut self, cx: &mut Context) {
+        if !self.docks.wants_symbols() {
+            return;
+        }
+        let editor = &*cx.editor;
+        let Some(view) = editor.tree.try_get(editor.tree.focus) else { return };
+        let Some(doc) = editor.document(view.doc) else { return };
+        let Some(path) = doc.path().cloned() else { return };
+        let text = doc.text().slice(..);
+        let line = text.char_to_line(doc.selection(view.id).primary().cursor(text)) as u32;
+        let key = (doc.id(), doc.version());
+        self.docks.follow_line(Some(line));
+        if self.symbols_key == Some(key) {
+            return;
+        }
+        if self.symbols_key.is_some_and(|k| k.0 == key.0) && self.symbols_at.elapsed() < std::time::Duration::from_millis(400) {
+            return;
+        }
+        self.symbols_key = Some(key);
+        self.symbols_at = std::time::Instant::now();
+        let Some(request) = commands::lsp::document_symbol_tree(doc) else {
+            self.docks.set_symbols(&path, Vec::new());
+            return;
+        };
+        cx.jobs.callback(async move {
+            let symbols = request.await.unwrap_or_default();
+            let call: crate::job::Callback = crate::job::Callback::EditorCompositor(Box::new(move |_editor, compositor| {
+                if let Some(view) = compositor.find::<EditorView>() {
+                    view.docks.set_symbols(&path, symbols);
+                }
+            }));
+            Ok(call)
+        });
+    }
+
     pub fn new(keymaps: Keymaps) -> Self {
         Self {
             keymaps,
@@ -85,6 +125,8 @@ impl EditorView {
             spinners: ProgressSpinners::default(),
             terminal_focused: true,
             docks: Default::default(),
+            symbols_key: None,
+            symbols_at: std::time::Instant::now(),
             ribbon: Ribbon::default(),
         }
     }
@@ -1653,6 +1695,7 @@ impl Component for EditorView {
 
     fn render(&mut self, area: Rect, surface: &mut Surface, cx: &mut Context) {
         update_conceal(cx.editor);
+        self.request_symbols(cx);
         // clear with background color
         surface.set_style(area, cx.editor.theme.get("ui.background"));
         let config = cx.editor.config();
