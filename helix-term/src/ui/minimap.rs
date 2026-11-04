@@ -41,6 +41,17 @@ impl Layout {
     }
 }
 
+/// `over` mixed into `base`, `percent` of it (RGB colors; anything else gives `over`).
+fn blend(over: Color, base: Color, percent: u32) -> Color {
+    match (over, base) {
+        (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
+            let m = |a: u8, b: u8| ((u32::from(a) * percent + u32::from(b) * (100 - percent)) / 100) as u8;
+            Color::Rgb(m(r1, r2), m(g1, g2), m(b1, b2))
+        }
+        _ => over,
+    }
+}
+
 /// The braille bit of the dot at column `c` (0..2) and row `r` (0..4) of a cell.
 fn bit(c: usize, r: usize) -> u32 {
     const BITS: [[u32; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
@@ -131,8 +142,17 @@ pub fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut Surfac
     let cursor_lines: Vec<usize> = doc.selection(view.id).ranges().iter().map(|r| text.char_to_line(r.cursor(text.slice(..)))).collect();
 
     let dim = theme.get("ui.linenr").fg.unwrap_or(Color::Gray);
-    let tint = theme.get("ui.selection").bg.or_else(|| theme.get("ui.cursorline.primary").bg);
-    let accent = theme.get("ui.cursor.primary").bg.or_else(|| theme.get("ui.text").fg).unwrap_or(Color::White);
+    let bright = theme.get("ui.text").fg.unwrap_or(Color::White);
+    // The first theme color that is a real RGB value (a named or reset color cannot be blended).
+    let accent = [theme.get("ui.cursor.primary").bg, theme.get("ui.selection").bg, theme.get("ui.cursorline.primary").bg, theme.get("ui.text").fg, theme.get("ui.linenr.selected").fg]
+        .into_iter()
+        .flatten()
+        .find(|c| matches!(c, Color::Rgb(..)))
+        .unwrap_or(Color::Rgb(90, 160, 255));
+    // What is on screen is a clear band of the accent color; the line of the cursor a stronger one across the whole width.
+    let base = theme.get("ui.background").bg.unwrap_or(Color::Rgb(0, 0, 0));
+    let band = blend(accent, base, 26);
+    let cursor_band = blend(accent, base, 60);
     let on_screen = first..first + visible;
     for cy in 0..usize::from(r.height) {
         // The cell stands for these lines.
@@ -151,20 +171,15 @@ pub fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut Surfac
             }
             let mut style = Style::default().fg(dim);
             if on_screen.start < cell_lines.end && cell_lines.start < on_screen.end {
-                if let Some(t) = tint {
-                    style = style.bg(t);
-                }
+                style = style.fg(bright).bg(band);
+            }
+            if cursor_lines.iter().any(|l| cell_lines.contains(l)) {
+                style = style.fg(bright).bg(cursor_band);
             }
             // The edge column carries the marks, so they do not recolor the text dots.
             if cx + 1 == usize::from(r.width) {
                 if let Some((_, c)) = marks.iter().rev().find(|(l, _)| cell_lines.contains(l)) {
                     style = style.fg(*c);
-                    if mask == 0 {
-                        mask = 0xC0;
-                    }
-                }
-                if cursor_lines.iter().any(|l| cell_lines.contains(l)) {
-                    style = style.fg(accent);
                     if mask == 0 {
                         mask = 0xC0;
                     }
