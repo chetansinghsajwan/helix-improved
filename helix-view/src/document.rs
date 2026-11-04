@@ -154,6 +154,10 @@ pub struct Document {
     pub(crate) conceal: HashMap<ViewId, (u64, Vec<Overlay>)>,
     /// Show Markdown rendered where the cursor is not (live mode) instead of its source.
     pub markdown_live: bool,
+    /// Show csv, tsv and psv files with their columns aligned (live mode) instead of as written.
+    pub table_live: bool,
+    /// The alignment padding and tab overlays, for the document version they were made for.
+    pub(crate) table: Option<(u64, Vec<InlineAnnotation>, Vec<Overlay>)>,
     /// Set to `true` when the document is updated, reset to `false` on the next inlay hints
     /// update from the LSP
     pub inlay_hints_oudated: bool,
@@ -731,6 +735,8 @@ impl Document {
             jump_labels: HashMap::new(),
             conceal: HashMap::new(),
             markdown_live: false,
+            table_live: true,
+            table: None,
             color_swatches: None,
             color_swatch_controller: TaskController::new(),
             syn_loader,
@@ -2275,6 +2281,19 @@ impl Document {
     /// The key the hidden syntax of `view_id` was computed for, if there is any.
     pub fn conceal_key(&self, view_id: ViewId) -> Option<u64> {
         self.conceal.get(&view_id).map(|(k, _)| *k)
+    }
+
+    /// The version the alignment of a table was made for, if there is one.
+    pub fn table_key(&self) -> Option<u64> {
+        self.table.as_ref().map(|(k, _, _)| *k)
+    }
+
+    pub fn set_table(&mut self, key: u64, pads: Vec<InlineAnnotation>, overlays: Vec<Overlay>) {
+        self.table = Some((key, pads, overlays));
+    }
+
+    pub fn clear_table(&mut self) {
+        self.table = None;
     }
 
     /// Hide (`""`) or replace the characters at these overlays in `view_id`, for `key`.

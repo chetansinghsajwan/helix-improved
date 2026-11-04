@@ -1429,6 +1429,7 @@ impl EditorView {
 /// documents in live mode (and drop it where the mode is off).
 fn update_conceal(editor: &mut helix_view::Editor) {
     use std::hash::{Hash, Hasher};
+    update_tables(editor);
     let views: Vec<(helix_view::ViewId, helix_view::DocumentId)> = editor.tree.views().map(|(v, _)| (v.id, v.doc)).collect();
     for (view_id, doc_id) in views {
         let Some(doc) = editor.documents.get_mut(&doc_id) else { continue };
@@ -1909,5 +1910,26 @@ fn canonicalize_key(key: &mut KeyEvent) {
     } = key
     {
         key.modifiers.remove(KeyModifiers::SHIFT)
+    }
+}
+
+/// Align the columns of csv, tsv and psv documents in live mode (and drop the padding where the mode is off).
+fn update_tables(editor: &mut helix_view::Editor) {
+    let docs: Vec<helix_view::DocumentId> = editor.tree.views().map(|(v, _)| v.doc).collect();
+    for doc_id in docs {
+        let Some(doc) = editor.documents.get_mut(&doc_id) else { continue };
+        let delim = super::table::delimiter(doc.path().map(|p| p.as_path()));
+        let Some(delim) = delim.filter(|_| doc.table_live) else {
+            if doc.table_key().is_some() {
+                doc.clear_table();
+            }
+            continue;
+        };
+        let key = doc.version() as u64;
+        if doc.table_key() == Some(key) {
+            continue;
+        }
+        let (pads, overlays) = super::table::align(doc.text().slice(..), delim);
+        doc.set_table(key, pads, overlays);
     }
 }
