@@ -990,7 +990,7 @@ pub struct DocksConfig {
 
 impl Default for DocksConfig {
     fn default() -> Self {
-        DocksConfig { left: vec!["files".into()], right: vec!["git".into()], bottom: vec!["diagnostics".into()] }
+        DocksConfig { left: vec!["files".into()], right: vec!["git".into(), "symbols".into()], bottom: vec!["diagnostics".into()] }
     }
 }
 

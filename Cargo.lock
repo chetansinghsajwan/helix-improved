@@ -3087,6 +3087,7 @@ dependencies = [
  "signal-hook",
  "signal-hook-tokio",
  "smallvec",
+ "symbols-panel",
  "tempfile",
  "termini",
  "thiserror 2.0.12",
@@ -5148,6 +5149,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.101",
+]
+
+[[package]]
+name = "symbols-panel"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "tui-input",
+ "ui",
 ]
 
 [[package]]

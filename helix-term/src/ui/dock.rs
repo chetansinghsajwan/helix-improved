@@ -65,6 +65,10 @@ pub trait DockPanel {
     fn reveal(&mut self, _path: &Path) {}
     /// Reread what the panel shows (something changed on disk).
     fn refresh(&mut self) {}
+    /// The symbols of the file being edited (the symbol explorer).
+    fn set_symbols(&mut self, _path: &Path, _symbols: Vec<symbols_panel::Symbol>) {}
+    /// The line the editor's cursor is on (0-based), if there is a file.
+    fn follow_line(&mut self, _line: Option<u32>) {}
     /// The file or folder under the cursor, for the preview beside the dock.
     fn preview_target(&self) -> Option<PathBuf> {
         None
@@ -226,6 +230,7 @@ impl DockPanel for DiagnosticsDock {
 
 fn make_panel(id: &str, root: &Path) -> Option<Box<dyn DockPanel>> {
     match id {
+        "symbols" => Some(Box::new(SymbolsDock::default())),
         "diagnostics" => Some(Box::new(DiagnosticsDock(diagnostics_panel::Panel::new(root)))),
         "files" => Some(Box::new(FilesDock(files::Panel::new(root, files::PanelOptions::default()), None))),
         "git" => git_panel::Panel::new(root).map(|p| Box::new(GitDock(p, None)) as Box<dyn DockPanel>),
@@ -608,5 +613,100 @@ impl Docks {
             }
         }
         copy(&buf, from_ratatui(area), surface);
+    }
+}
+
+/// The symbols of the file being edited, as a tree to jump from.
+#[derive(Default)]
+struct SymbolsDock {
+    panel: symbols_panel::Panel,
+    /// The file the symbols are of (a jump opens it).
+    path: Option<PathBuf>,
+    help: Option<tui_design::keys::Help>,
+}
+
+impl DockPanel for SymbolsDock {
+    fn id(&self) -> &'static str {
+        "symbols"
+    }
+
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
+        self.panel.render(area, buf, theme, focused);
+        if let Some(help) = &mut self.help {
+            help.render(area, buf, theme, "Keys", &self.panel.keys_rows());
+        }
+    }
+
+    fn is_typing(&self) -> bool {
+        self.panel.is_typing() || self.help.is_some()
+    }
+
+    fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
+        if let Some(help) = &mut self.help {
+            if !help.key(&key) {
+                self.help = None;
+            }
+            return PanelEvent::None;
+        }
+        match self.panel.handle_event(&ct::Event::Key(key)) {
+            symbols_panel::Action::Goto { line, col } => match &self.path {
+                Some(path) => PanelEvent::OpenAt { path: path.clone(), line: line + 1, col: col + 1 },
+                None => PanelEvent::None,
+            },
+            symbols_panel::Action::Close => PanelEvent::Unfocus,
+            symbols_panel::Action::Help => {
+                self.help = Some(tui_design::keys::Help::default());
+                PanelEvent::None
+            }
+            symbols_panel::Action::Palette | symbols_panel::Action::None => PanelEvent::None,
+        }
+    }
+
+    fn set_symbols(&mut self, path: &Path, symbols: Vec<symbols_panel::Symbol>) {
+        self.path = Some(path.to_path_buf());
+        self.panel.set_symbols(symbols);
+    }
+
+    fn follow_line(&mut self, line: Option<u32>) {
+        self.panel.follow(line);
+    }
+}
+
+impl Docks {
+    /// Whether a symbol explorer is on screen (so the editor should ask the language server for symbols).
+    pub fn wants_symbols(&mut self) -> bool {
+        [Side::Left, Side::Right, Side::Bottom].into_iter().any(|side| {
+            let d = self.dock(side);
+            d.shown() && d.ids.get(d.active).is_some_and(|id| id == "symbols")
+        })
+    }
+
+    /// Give every symbol explorer the symbols of `path`.
+    pub fn set_symbols(&mut self, path: &Path, symbols: Vec<symbols_panel::Symbol>) {
+        let root = self.root.clone().unwrap_or_default();
+        for side in [Side::Left, Side::Right, Side::Bottom] {
+            let d = self.dock(side);
+            if d.ids.iter().any(|id| id == "symbols") {
+                for i in 0..d.ids.len() {
+                    if d.ids[i] == "symbols" {
+                        if d.panels[i].is_none() {
+                            d.panels[i] = make_panel(&d.ids[i], &root);
+                        }
+                        if let Some(p) = d.panels[i].as_mut() {
+                            p.set_symbols(path, symbols.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Tell the panels which line the editor's cursor is on.
+    pub fn follow_line(&mut self, line: Option<u32>) {
+        for side in [Side::Left, Side::Right, Side::Bottom] {
+            for p in self.dock(side).panels.iter_mut().flatten() {
+                p.follow_line(line);
+            }
+        }
     }
 }
