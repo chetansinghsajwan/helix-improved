@@ -11,17 +11,11 @@
     runCommand,
     helix,
     helix-unwrapped,
-    pkgs,
-    composeSrc,
+    src,
 }:
 let
-    # Layout `source/{helix,term-toolkit}`: helix-term has path dependencies on
+    # `src` has `helix/` and `term-toolkit/` side by side: helix-term has path dependencies on
     # `../../term-toolkit/{pick,ui,...}` that must resolve inside the build directory.
-    src = composeSrc {
-        inherit pkgs;
-        name = "helix";
-        src = ./.;
-    };
     helixSrc = "${src}/helix";
 
     # What helix falls back to when HELIX_RUNTIME is unset: themes, languages
