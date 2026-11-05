@@ -1,9 +1,9 @@
-# Our helix fork (home/helix) with the shared crates (home/crates).
+# Our helix fork (pkgs/helix) with the shared toolkit (pkgs/term-toolkit).
 #
 # The unwrapped editor is built here. The runtime directory (queries plus the
 # tree-sitter grammars built by Nix) comes from nixpkgs' own `helix` wrapper,
 # which we reuse by swapping in our unwrapped build. That is valid because the
-# fork is based on the same upstream tag nixpkgs ships (see home/helix/FORK.md);
+# fork is based on the same upstream tag nixpkgs ships (see pkgs/helix/FORK.md);
 # when nixpkgs moves to another helix version, rebase the fork first.
 {
     lib,
@@ -11,25 +11,16 @@
     runCommand,
     helix,
     helix-unwrapped,
+    pkgs,
+    composeSrc,
 }:
 let
-    # Layout `source/{helix,crates}`: helix-term has path dependencies on
-    # `../../crates/{pick,ui}` that must resolve inside the build directory.
-    src = lib.fileset.toSource {
-        root = ./.;
-        # Without local build output (target/), so the result does not depend on it.
-        fileset =
-            lib.fileset.difference
-                (lib.fileset.unions [
-                    ./helix
-                    ./crates
-                ])
-                (
-                    lib.fileset.unions [
-                        (lib.fileset.maybeMissing ./crates/target)
-                        (lib.fileset.maybeMissing ./helix/target)
-                    ]
-                );
+    # Layout `source/{helix,term-toolkit}`: helix-term has path dependencies on
+    # `../../term-toolkit/{pick,ui,...}` that must resolve inside the build directory.
+    src = composeSrc {
+        inherit pkgs;
+        name = "helix";
+        src = ./.;
     };
     helixSrc = "${src}/helix";
 
@@ -46,11 +37,11 @@ let
         inherit src;
         # The workspace is in a subdirectory, next to the shared `crates`.
         postUnpack = "cd $sourceRoot/helix; sourceRoot=.";
-        cargoLock = ./helix/Cargo.lock;
+        cargoLock = ./Cargo.lock;
         strictDeps = true;
 
         # Only the editor binary. The workspace's own tests are upstream's and
-        # slow; `pick`, `pv`, `git-core` and `ui` are tested in home/crates.
+        # slow; `pick`, `pv`, `git-core` and `ui` are tested in pkgs/term-toolkit.
         cargoExtraArgs = "--package helix-term";
         doCheck = false;
 
