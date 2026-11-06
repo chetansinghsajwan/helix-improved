@@ -16,6 +16,7 @@ pub mod preview;
 pub mod picker;
 pub mod popup;
 pub mod prompt;
+pub mod search_matches;
 mod spinner;
 mod statusline;
 mod text;

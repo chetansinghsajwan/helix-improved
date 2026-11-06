@@ -508,6 +508,8 @@ pub struct SearchConfig {
     pub smart_case: bool,
     /// Whether the search should wrap after depleting the matches. Default to true.
     pub wrap_around: bool,
+    /// Highlight every match of the last search in the view until Esc. Defaults to true.
+    pub highlight: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -636,6 +638,9 @@ pub enum StatusLineElement {
 
     /// Indicator for selected register
     Register,
+
+    /// Position of the cursor among the matches of the last search ("3/17")
+    SearchMatches,
 }
 
 // Cursor shape is read and used on every rendered frame and so needs
@@ -1078,6 +1083,7 @@ impl Default for SearchConfig {
         Self {
             wrap_around: true,
             smart_case: true,
+            highlight: true,
         }
     }
 }
@@ -1117,6 +1123,8 @@ pub struct Editor {
     pub count: Option<std::num::NonZeroUsize>,
     pub selected_register: Option<char>,
     pub registers: Registers,
+    /// Whether the matches of the last search are highlighted (cleared by Esc).
+    pub search_highlight: bool,
     pub macro_recording: Option<(char, Vec<KeyEvent>)>,
     pub macro_replaying: Vec<char>,
     pub language_servers: helix_lsp::Registry,
@@ -1275,6 +1283,7 @@ impl Editor {
             theme_loader,
             last_theme: None,
             last_selection: None,
+            search_highlight: false,
             registers: Registers::new(Box::new(arc_swap::access::Map::new(
                 Arc::clone(&config),
                 |config: &Config| &config.clipboard_provider,
