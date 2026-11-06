@@ -4412,6 +4412,7 @@ dependencies = [
  "calamine",
  "csv",
  "git-core",
+ "ignore",
  "image",
  "lofty",
  "lopdf",
