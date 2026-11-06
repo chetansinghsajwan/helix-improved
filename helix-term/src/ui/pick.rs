@@ -1,4 +1,4 @@
-//! Bridge to the shared `pick` picker (dotfiles/home/crates/pick).
+//! Bridge to the shared `pick` picker (tuikit/crates/pick).
 //!
 //! `pick` draws with ratatui and reads crossterm events; helix draws on its own
 //! `helix-tui` surface and has its own input types. This component owns a
