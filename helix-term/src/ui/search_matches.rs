@@ -44,10 +44,15 @@ pub fn build_regex(query: &str, smart_case: bool) -> Option<rope::Regex> {
 /// The matches of the last search in `doc`, or `None` when highlighting is off,
 /// nothing was searched, or the query is not a valid regex.
 pub fn matches(editor: &Editor, doc: &Document) -> Option<Rc<Matches>> {
-    let config = editor.config();
-    if !editor.search_highlight || !config.search.highlight {
+    if !editor.search_highlight || !editor.config().search.highlight {
         return None;
     }
+    all(editor, doc)
+}
+
+/// Like `matches`, but whether or not the matches are highlighted.
+pub fn all(editor: &Editor, doc: &Document) -> Option<Rc<Matches>> {
+    let config = editor.config();
     let query = editor
         .registers
         .first(editor.registers.last_search_register, editor)?
