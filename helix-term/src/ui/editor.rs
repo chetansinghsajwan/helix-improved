@@ -268,6 +268,7 @@ impl EditorView {
             surface,
             inner,
             doc,
+            Some(primary_cursor),
             view_offset,
             &text_annotations,
             syntax_highlighter,

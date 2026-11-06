@@ -32,6 +32,7 @@ pub fn render_document(
     surface: &mut Surface,
     viewport: Rect,
     doc: &Document,
+    cursor: Option<usize>,
     offset: ViewPosition,
     doc_annotations: &TextAnnotations,
     syntax_highlighter: Option<Highlighter<'_>>,
@@ -46,6 +47,7 @@ pub fn render_document(
         Position::new(offset.vertical_offset, offset.horizontal_offset),
         viewport,
     );
+    renderer.active_guide = cursor.and_then(|c| active_guide(doc, c));
     render_text(
         &mut renderer,
         doc.text().slice(..),
@@ -119,7 +121,7 @@ pub fn render_text(
             // in that case we don't need to draw indent guides/virtual text
             if last_line_pos.doc_line != usize::MAX {
                 // draw indent guides for the last line
-                renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line);
+                renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line, last_line_pos.doc_line);
                 is_in_indent_area = true;
                 decorations.render_virtual_lines(renderer, last_line_pos, last_line_end)
             }
@@ -168,7 +170,7 @@ pub fn render_text(
         last_line_end = grapheme.visual_pos.col + grapheme_width;
     }
 
-    renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line);
+    renderer.draw_indent_guides(last_line_indent_level, last_line_pos.visual_line, last_line_pos.doc_line);
     decorations.render_virtual_lines(renderer, last_line_pos, last_line_end)
 }
 
@@ -188,6 +190,9 @@ pub struct TextRenderer<'a> {
     pub indent_width: u16,
     pub starting_indent: usize,
     pub draw_indent_guides: bool,
+    /// The scope the cursor is in, as `(first line, end line, guide column)`: its guide is drawn in the accent.
+    pub active_guide: Option<(usize, usize, usize)>,
+    active_guide_style: Style,
     pub viewport: Rect,
     pub offset: Position,
 }
@@ -267,6 +272,8 @@ impl<'a> TextRenderer<'a> {
             ),
             text_style,
             draw_indent_guides: editor_config.indent_guides.render,
+            active_guide: None,
+            active_guide_style: accent_style(),
             viewport,
             offset,
         }
@@ -390,7 +397,7 @@ impl<'a> TextRenderer<'a> {
     /// Overlay indentation guides ontop of a rendered line
     /// The indentation level is computed in `draw_lines`.
     /// Therefore this function must always be called afterwards.
-    pub fn draw_indent_guides(&mut self, indent_level: usize, mut row: u16) {
+    pub fn draw_indent_guides(&mut self, indent_level: usize, mut row: u16, doc_line: usize) {
         if !self.draw_indent_guides || self.offset.row > row as usize {
             return;
         }
@@ -409,8 +416,9 @@ impl<'a> TextRenderer<'a> {
                 as u16;
             let y = self.viewport.y + row;
             debug_assert!(self.surface.in_bounds(x, y));
-            self.surface
-                .set_string(x, y, &self.indent_guide_char, self.indent_guide_style);
+            let active = self.active_guide.is_some_and(|(from, to, col)| i == col && (from..to).contains(&doc_line));
+            let style = if active { self.indent_guide_style.patch(self.active_guide_style) } else { self.indent_guide_style };
+            self.surface.set_string(x, y, &self.indent_guide_char, style);
         }
     }
 
@@ -571,4 +579,44 @@ impl<'t> OverlayHighlighter<'t> {
         });
         self.update_pos();
     }
+}
+
+/// The design accent as a foreground style, read once (the theme file is not parsed again for every frame).
+fn accent_style() -> Style {
+    static ACCENT: std::sync::OnceLock<Style> = std::sync::OnceLock::new();
+    *ACCENT.get_or_init(|| match tui_design::Theme::load().colors.accent.into() {
+        ratatui::style::Color::Rgb(r, g, b) => Style::default().fg(helix_view::graphics::Color::Rgb(r, g, b)),
+        _ => Style::default(),
+    })
+}
+
+/// How many lines either side of the cursor are looked at to find its scope.
+const SCOPE_WINDOW: usize = 3000;
+
+/// The scope the cursor is in, as `(first line, end line, guide column)`. The editor passes the lines and the
+/// cursor; which block that is and which guide marks it is `tui_design::tree::code_scope`, the same rule every
+/// tree and code view uses.
+fn active_guide(doc: &Document, cursor: usize) -> Option<(usize, usize, usize)> {
+    let text = doc.text().slice(..);
+    let line = text.char_to_line(cursor.min(text.len_chars()));
+    let first = line.saturating_sub(SCOPE_WINDOW);
+    let last = (line + SCOPE_WINDOW).min(text.len_lines());
+    let tab = doc.tab_width().max(1);
+    let indents: Vec<Option<usize>> = (first..last)
+        .map(|l| {
+            let mut cells = 0;
+            for ch in text.line(l).chars() {
+                match ch {
+                    ' ' => cells += 1,
+                    '\t' => cells += tab - cells % tab,
+                    '\n' | '\r' => return None,
+                    _ => return Some(cells),
+                }
+            }
+            None
+        })
+        .collect();
+    let unit = doc.indent_style.indent_width(tab) as usize;
+    let s = tui_design::tree::code_scope(&indents, unit, line - first)?;
+    Some((first + s.from, first + s.to, s.col))
 }
