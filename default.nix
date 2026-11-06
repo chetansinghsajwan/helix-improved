@@ -1,9 +1,9 @@
-# Our helix fork (pkgs/helix) with the shared toolkit (pkgs/term-toolkit).
+# helix-improved: our helix fork with the shared toolkit (the tuikit submodule).
 #
 # The unwrapped editor is built here. The runtime directory (queries plus the
 # tree-sitter grammars built by Nix) comes from nixpkgs' own `helix` wrapper,
 # which we reuse by swapping in our unwrapped build. That is valid because the
-# fork is based on the same upstream tag nixpkgs ships (see pkgs/helix/FORK.md);
+# fork is based on the same upstream tag nixpkgs ships (see FORK.md);
 # when nixpkgs moves to another helix version, rebase the fork first.
 {
     lib,
@@ -14,9 +14,9 @@
     src,
 }:
 let
-    # `src` has `helix/` and `term-toolkit/` side by side: helix-term has path dependencies on
-    # `../../term-toolkit/{pick,ui,...}` that must resolve inside the build directory.
-    helixSrc = "${src}/helix";
+    # `src` is the repo with `tuikit/crates` in it: helix-term has path dependencies on
+    # `../tuikit/crates/{pick,ui,...}` that must resolve inside the build directory.
+    helixSrc = src;
 
     # What helix falls back to when HELIX_RUNTIME is unset: themes, languages
     # and so on, without the queries and grammars that the wrapper supplies.
@@ -29,13 +29,11 @@ let
         pname = "helix-unwrapped";
         inherit (helix-unwrapped) version;
         inherit src;
-        # The workspace is in a subdirectory, next to the shared `crates`.
-        postUnpack = "cd $sourceRoot/helix; sourceRoot=.";
         cargoLock = ./Cargo.lock;
         strictDeps = true;
 
         # Only the editor binary. The workspace's own tests are upstream's and
-        # slow; `pick`, `pv`, `git-core` and `ui` are tested in pkgs/term-toolkit.
+        # slow; `pick`, `pv`, `git-core` and `ui` are tested in tuikit.
         cargoExtraArgs = "--package helix-term";
         doCheck = false;
 

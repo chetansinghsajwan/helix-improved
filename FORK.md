@@ -10,8 +10,8 @@ crates (`../crates`) and the Nix build live in one repository.
   `home/helix/**`, see `treefmt.nix`). Fetched grammars (`runtime/grammars/`)
   are build output and are ignored.
 - **Our changes** (everything else is unmodified upstream):
-  - `helix-term/Cargo.toml`: path dependencies on `../../crates/pick` and
-    `../../crates/ui` (renamed `tui-design`, helix-term has its own `ui`
+  - `helix-term/Cargo.toml`: path dependencies on `tuikit/crates/pick` and
+    `tuikit/crates/ui` (renamed `tui-design`, helix-term has its own `ui`
     module), and `ratatui`.
   - `helix-term/src/ui/pick.rs` (new): the bridge component around
     `pick::Picker`.
@@ -49,8 +49,8 @@ match the helix version in nixpkgs; rebase this fork first when nixpkgs moves.
 - `helix-term/src/ui/git_panel.rs` and `ui/pick.rs` (popups), `commands.rs`
   (`git_panel`, `files_panel`, `dock_*`, `buffer_picker`, ...) and
   `keymap/default.rs` (`space g`, `space 1/2/3`, ...).
-- Path dependencies now also include `../../crates/files`, `../../crates/diagnostics-panel` and
-  `../../crates/git-panel`.
+- Path dependencies now also include `tuikit/crates/files`, `tuikit/crates/diagnostics-panel` and
+  `tuikit/crates/git-panel`.
 - `helix-view/src/view.rs`: `View::bottom_margin` (rows between text and status line
   that belong to the frame around the editor), used by `inner_area()` and
   `inner_height()`.

@@ -1,0 +1,3 @@
+[submodule "tuikit"]
+	path = tuikit
+	url = https://github.com/chetansinghsajwan/tuikit

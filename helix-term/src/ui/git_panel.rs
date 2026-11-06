@@ -1,4 +1,4 @@
-//! The git panel: the shared `git-panel` (dotfiles/home/crates/git-panel) as a
+//! The git panel: the shared `git-panel` (tuikit/crates/git-panel) as a
 //! popup, like the pickers. Same bridge as `pick.rs`: helix keys are converted
 //! for the panel, which draws into a ratatui buffer that is copied onto the
 //! helix surface; colors, sizes and borders come from the shared `ui` tokens.
