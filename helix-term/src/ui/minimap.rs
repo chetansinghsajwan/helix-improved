@@ -108,6 +108,14 @@ pub fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut Surfac
     // Lines with something to show.
     let mut marks: Vec<(usize, Color)> = Vec::new();
     let style_fg = |name: &str| theme.get(name).fg;
+    // Matches of the last search go first, so a diagnostic or change on the same line wins.
+    if let Some(matches) = super::search_matches::matches(editor, doc) {
+        let style = ["ui.search.match", "ui.cursor.match"].into_iter().map(|n| theme.get(n)).find(|s| s.bg.is_some() || s.fg.is_some());
+        if let Some(color) = style.and_then(|s| s.bg.or(s.fg)) {
+            let window = text.line_to_char(layout.start)..text.line_to_char(end);
+            marks.extend(matches.in_range(window).iter().map(|m| (text.char_to_line(m.start), color)));
+        }
+    }
     if let Some(diff) = doc.diff_handle() {
         let diff = diff.load();
         let (plus, delta, minus) = (style_fg("diff.plus"), style_fg("diff.delta"), style_fg("diff.minus"));
