@@ -158,7 +158,28 @@ where
         helix_view::editor::StatusLineElement::Spacer => render_spacer,
         helix_view::editor::StatusLineElement::VersionControl => render_version_control,
         helix_view::editor::StatusLineElement::Register => render_register,
+        helix_view::editor::StatusLineElement::SearchMatches => render_search_matches,
     }
+}
+
+fn render_search_matches<'a, F>(context: &mut RenderContext<'a>, write: F)
+where
+    F: Fn(&mut RenderContext<'a>, Span<'a>) + Copy,
+{
+    if !context.focused {
+        return;
+    }
+    let Some(matches) = super::search_matches::matches(context.editor, context.doc) else {
+        return;
+    };
+    let total = matches.ranges.len();
+    let plus = if matches.truncated { "+" } else { "" };
+    let from = context.doc.selection(context.view.id).primary().from();
+    let label = match matches.index_at(from) {
+        Some(i) => format!(" {i}/{total}{plus} "),
+        None => format!(" {total}{plus} matches "),
+    };
+    write(context, label.into());
 }
 
 fn render_mode<'a, F>(context: &mut RenderContext<'a>, write: F)

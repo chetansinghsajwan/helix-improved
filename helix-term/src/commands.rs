@@ -2343,6 +2343,7 @@ fn search_impl(
     wrap_around: bool,
     show_warnings: bool,
 ) {
+    editor.search_highlight = true;
     let (view, doc) = current!(editor);
     let text = doc.text().slice(..);
     let selection = doc.selection(view.id);
@@ -4242,6 +4243,7 @@ fn open_above(cx: &mut Context) {
 }
 
 fn normal_mode(cx: &mut Context) {
+    cx.editor.search_highlight = false;
     cx.editor.enter_normal_mode();
 }
 

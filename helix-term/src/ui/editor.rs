@@ -210,6 +210,9 @@ impl EditorView {
         Self::doc_diagnostics_highlights_into(doc, theme, &mut overlays);
 
         if is_focused {
+            if let Some(overlay) = Self::search_match_highlights(editor, doc, view, inner.height) {
+                overlays.push(overlay);
+            }
             if let Some(tabstops) = Self::tabstop_highlights(doc, theme) {
                 overlays.push(tabstops);
             }
@@ -651,6 +654,27 @@ impl EditorView {
         let pos = doc.selection(view.id).primary().cursor(text);
         let pos = helix_core::match_brackets::find_matching_bracket(syntax, text, pos)?;
         Some(OverlayHighlights::single(highlight, pos..pos + 1))
+    }
+
+    /// Every match of the last search in the viewport (`ui.search.match`,
+    /// falling back to `ui.cursor.match`).
+    fn search_match_highlights(
+        editor: &Editor,
+        doc: &Document,
+        view: &View,
+        height: u16,
+    ) -> Option<OverlayHighlights> {
+        let matches = super::search_matches::matches(editor, doc)?;
+        let theme = &editor.theme;
+        let highlight = theme
+            .find_highlight_exact("ui.search.match")
+            .or_else(|| theme.find_highlight_exact("ui.cursor.match"))?;
+        let text = doc.text().slice(..);
+        let row = text.char_to_line(doc.view_offset(view.id).anchor.min(text.len_chars()));
+        let bytes = Self::viewport_byte_range(text, row, height);
+        let visible = text.byte_to_char(bytes.start)..text.byte_to_char(bytes.end);
+        let ranges = matches.in_range(visible).to_vec();
+        (!ranges.is_empty()).then_some(OverlayHighlights::Homogeneous { highlight, ranges })
     }
 
     pub fn tabstop_highlights(doc: &Document, theme: &Theme) -> Option<OverlayHighlights> {
