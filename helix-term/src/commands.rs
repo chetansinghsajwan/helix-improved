@@ -379,6 +379,11 @@ impl MappableCommand {
         make_search_word_bounded, "Modify current search to make it word bounded",
         global_search, "Global search in workspace folder",
         search_lines, "Fuzzy-find a line of the current buffer",
+        search_select_all_matches, "Select every match of the last search",
+        search_toggle_case, "Toggle case sensitivity of the last search",
+        search_matches_list, "List the matches of the last search",
+        search_history, "Pick an earlier search pattern",
+        search_jump, "Jump to a visible match of the last search by label",
         extend_line, "Select current line, if already selected, extend to another line based on the anchor",
         extend_line_below, "Select current line, if already selected, extend to next line",
         extend_line_above, "Select current line, if already selected, extend to previous line",
@@ -3500,6 +3505,167 @@ fn buffer_text(doc: &Document) -> String {
 /// recently used first with `+` (modified) and `*` (current) flags, the previous
 /// buffer is preselected, and the preview shows the buffer's text as it is in
 /// the editor, unsaved changes included.
+/// Select every match of the last search in the buffer (a cursor per match).
+fn search_select_all_matches(cx: &mut Context) {
+    let Some(matches) = ui::search_matches::all(cx.editor, doc!(cx.editor)) else {
+        cx.editor.set_error("No search pattern");
+        return;
+    };
+    if matches.ranges.is_empty() {
+        cx.editor.set_error("No matches");
+        return;
+    }
+    let ranges: SmallVec<[Range; 1]> = matches.ranges.iter().map(|r| Range::new(r.start, r.end)).collect();
+    let count = ranges.len();
+    let (view, doc) = current!(cx.editor);
+    doc.set_selection(view.id, Selection::new(ranges, 0));
+    cx.editor.set_status(format!("Selected {count} matches"));
+}
+
+/// Flip the last search between case sensitive and insensitive (a `(?i)` or `(?-i)` prefix).
+fn search_toggle_case(cx: &mut Context) {
+    let register = cx.editor.registers.last_search_register;
+    let Some(pattern) = cx.editor.registers.first(register, cx.editor).map(|p| p.into_owned()) else {
+        cx.editor.set_error("No search pattern");
+        return;
+    };
+    let smart_case = cx.editor.config().search.smart_case;
+    let (body, insensitive) = if let Some(rest) = pattern.strip_prefix("(?i)") {
+        (rest, true)
+    } else if let Some(rest) = pattern.strip_prefix("(?-i)") {
+        (rest, false)
+    } else {
+        (pattern.as_str(), smart_case && !pattern.chars().any(char::is_uppercase))
+    };
+    let (prefix, label) = if insensitive { ("(?-i)", "case sensitive") } else { ("(?i)", "case insensitive") };
+    match cx.editor.registers.push(register, format!("{prefix}{body}")) {
+        Ok(_) => {
+            cx.editor.search_highlight = true;
+            cx.editor.set_status(format!("Search is {label}"));
+        }
+        Err(err) => cx.editor.set_error(err.to_string()),
+    }
+}
+
+/// Select the range `[start, end)` of the current buffer and centre it.
+fn select_match(cx: &mut compositor::Context, start: usize, end: usize) {
+    let (view, doc) = current!(cx.editor);
+    push_jump(view, doc);
+    let len = doc.text().len_chars();
+    doc.set_selection(view.id, Selection::single(start.min(len), end.min(len)));
+    align_view(doc, view, Align::Center);
+}
+
+/// Pick one of the matches of the last search from a list of the lines they are on.
+fn search_matches_list(cx: &mut Context) {
+    use pick::{source, Candidate, Mode, PickerOptions};
+    let Some(matches) = ui::search_matches::all(cx.editor, doc!(cx.editor)) else {
+        cx.editor.set_error("No search pattern");
+        return;
+    };
+    let text = doc!(cx.editor).text();
+    let width = text.len_lines().to_string().len();
+    let candidates: Vec<Candidate> = matches
+        .ranges
+        .iter()
+        .map(|r| {
+            let line = text.char_to_line(r.start);
+            let content = text.line(line).to_string();
+            Candidate::with_raw(
+                format!("{:>width$}  {}", line + 1, content.trim()),
+                format!("{}:{}", r.start, r.end),
+            )
+        })
+        .collect();
+    let opts = PickerOptions {
+        mode: Mode::Fuzzy,
+        paths: false,
+        root: helix_stdx::env::current_working_dir(),
+        preview: false,
+        git: false,
+        query: String::new(),
+    };
+    let picker = ui::pick::PickComponent::new(
+        opts,
+        move |p| source::push_candidates(&p.injector(), candidates),
+        |_compositor, cx, picked| {
+            let Some((s, e)) = picked.first().and_then(|p| p.split_once(':')) else { return };
+            if let (Ok(s), Ok(e)) = (s.parse(), e.parse()) {
+                select_match(cx, s, e);
+            }
+        },
+    )
+    .with_title("Matches");
+    cx.push_layer(Box::new(picker));
+}
+
+/// Earlier search patterns, most recent first; accepting one searches for it.
+fn search_history(cx: &mut Context) {
+    use pick::{source, Candidate, Mode, PickerOptions};
+    let register = cx.register.unwrap_or('/');
+    let mut seen = std::collections::HashSet::new();
+    let candidates: Vec<Candidate> = cx
+        .editor
+        .registers
+        .read(register, cx.editor)
+        .map(|values| values.map(|v| v.into_owned()).filter(|v| seen.insert(v.clone())).map(Candidate::plain).collect())
+        .unwrap_or_default();
+    if candidates.is_empty() {
+        cx.editor.set_error("No search history");
+        return;
+    }
+    let opts = PickerOptions {
+        mode: Mode::Fuzzy,
+        paths: false,
+        root: helix_stdx::env::current_working_dir(),
+        preview: false,
+        git: false,
+        query: String::new(),
+    };
+    let picker = ui::pick::PickComponent::new(
+        opts,
+        move |p| source::push_candidates(&p.injector(), candidates),
+        move |_compositor, cx, picked| {
+            let Some(pattern) = picked.first() else { return };
+            let config = cx.editor.config();
+            let Some(regex) = ui::search_matches::build_regex(pattern, config.search.smart_case) else {
+                cx.editor.set_error("Invalid regex");
+                return;
+            };
+            if cx.editor.registers.push(register, pattern.clone()).is_ok() {
+                cx.editor.registers.last_search_register = register;
+            }
+            search_impl(cx.editor, &regex, Movement::Move, Direction::Forward, config.scrolloff, config.search.wrap_around, true);
+        },
+    )
+    .with_title("Search history");
+    cx.push_layer(Box::new(picker));
+}
+
+/// Label the visible matches of the last search with two keys and jump to the one typed.
+fn search_jump(cx: &mut Context) {
+    let Some(matches) = ui::search_matches::all(cx.editor, doc!(cx.editor)) else {
+        cx.editor.set_error("No search pattern");
+        return;
+    };
+    let alphabet_len = cx.editor.config().jump_label_alphabet.len();
+    let (view, doc) = current_ref!(cx.editor);
+    let text = doc.text().slice(..);
+    let start = text.line_to_char(text.char_to_line(doc.view_offset(view.id).anchor));
+    let end = text.line_to_char((view.estimate_last_doc_line(doc) + 1).min(text.len_lines()));
+    let labels: Vec<Range> = matches
+        .in_range(start..end)
+        .iter()
+        .take(alphabet_len * alphabet_len)
+        .map(|r| Range::new(r.start, r.end))
+        .collect();
+    if labels.is_empty() {
+        cx.editor.set_error("No visible matches");
+        return;
+    }
+    jump_to_label(cx, labels, Movement::Move);
+}
+
 /// Fuzzy-find a line of the current buffer and jump to it (`space l`).
 fn search_lines(cx: &mut Context) {
     use pick::{source, Candidate, Mode, PickerOptions};
