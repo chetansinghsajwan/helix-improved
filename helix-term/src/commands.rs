@@ -378,6 +378,7 @@ impl MappableCommand {
         search_selection_detect_word_boundaries, "Use current selection as the search pattern, automatically wrapping with `\\b` on word boundaries",
         make_search_word_bounded, "Modify current search to make it word bounded",
         global_search, "Global search in workspace folder",
+        search_lines, "Fuzzy-find a line of the current buffer",
         extend_line, "Select current line, if already selected, extend to another line based on the anchor",
         extend_line_below, "Select current line, if already selected, extend to next line",
         extend_line_above, "Select current line, if already selected, extend to previous line",
@@ -3499,6 +3500,60 @@ fn buffer_text(doc: &Document) -> String {
 /// recently used first with `+` (modified) and `*` (current) flags, the previous
 /// buffer is preselected, and the preview shows the buffer's text as it is in
 /// the editor, unsaved changes included.
+/// Fuzzy-find a line of the current buffer and jump to it (`space l`).
+fn search_lines(cx: &mut Context) {
+    use pick::{source, Candidate, Mode, PickerOptions};
+    /// Past this many lines the list is cut, to keep the picker responsive.
+    const MAX_LINES: usize = 200_000;
+
+    let (view, doc) = current_ref!(cx.editor);
+    let text = doc.text();
+    let width = text.len_lines().min(MAX_LINES).to_string().len();
+    let candidates: Vec<Candidate> = text
+        .lines()
+        .take(MAX_LINES)
+        .enumerate()
+        .filter_map(|(i, line)| {
+            let line: String = line.chars().filter(|c| *c != '\n' && *c != '\r').collect();
+            let trimmed = line.trim();
+            (!trimmed.is_empty())
+                .then(|| Candidate::with_raw(format!("{:>width$}  {trimmed}", i + 1), (i + 1).to_string()))
+        })
+        .collect();
+    // Start on the line nearest the cursor.
+    let cursor_line = doc.selection(view.id).primary().cursor_line(text.slice(..)) + 1;
+    let cursor = candidates
+        .iter()
+        .position(|c| c.raw.as_deref().and_then(|l| l.parse::<usize>().ok()).is_some_and(|l| l >= cursor_line))
+        .unwrap_or(0) as u32;
+
+    let opts = PickerOptions {
+        mode: Mode::Fuzzy,
+        paths: false,
+        root: helix_stdx::env::current_working_dir(),
+        preview: false,
+        git: false,
+        query: String::new(),
+    };
+    let picker = ui::pick::PickComponent::new(
+        opts,
+        move |p| source::push_candidates(&p.injector(), candidates),
+        |_compositor, cx, picked| {
+            let Some(line) = picked.first().and_then(|l| l.parse::<usize>().ok()) else { return };
+            let (view, doc) = current!(cx.editor);
+            push_jump(view, doc);
+            let text = doc.text();
+            let line = line.saturating_sub(1).min(text.len_lines().saturating_sub(1));
+            let pos = text.line_to_char(line);
+            doc.set_selection(view.id, Selection::point(pos));
+            align_view(doc, view, Align::Center);
+        },
+    )
+    .with_cursor(cursor)
+    .with_title("Lines");
+    cx.push_layer(Box::new(picker));
+}
+
 fn buffer_picker(cx: &mut Context) {
     use pick::{source, Buffer, Candidate, Mode, PickerOptions};
     let current = view!(cx.editor).doc;
