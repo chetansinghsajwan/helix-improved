@@ -16,6 +16,10 @@ members = [
   "xtask",
 ]
 
+# tuikit is its own workspace (a submodule); keep its crates out of this one so they inherit
+# from their own root.
+exclude = ["tuikit"]
+
 default-members = [
   "helix-term"
 ]

@@ -694,15 +694,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "diagnostics-panel"
-version = "0.1.0"
-dependencies = [
- "ratatui",
- "ui",
- "unicode-width 0.2.3",
-]
-
-[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -874,23 +865,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "files"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "git-core",
- "ignore",
- "imagesize",
- "infer",
- "mime_guess",
- "pv",
- "ratatui",
- "trash",
- "tui-input",
- "ui",
-]
-
-[[package]]
 name = "filetime"
 version = "0.2.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1051,24 +1025,6 @@ name = "gimli"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40ecd4077b5ae9fd2e9e169b102c6c330d0605168eb0e8bf79952b256dbefffd"
-
-[[package]]
-name = "git-core"
-version = "0.1.0"
-dependencies = [
- "gix 0.90.0",
-]
-
-[[package]]
-name = "git-panel"
-version = "0.1.0"
-dependencies = [
- "git-core",
- "pv",
- "ratatui",
- "tui-input",
- "ui",
-]
 
 [[package]]
 name = "gix"
@@ -2955,11 +2911,8 @@ dependencies = [
  "chrono",
  "content_inspector",
  "crossterm 0.28.1",
- "diagnostics-panel",
  "fern",
- "files",
  "futures-util",
- "git-panel",
  "grep-regex",
  "grep-searcher",
  "helix-core",
@@ -2979,9 +2932,7 @@ dependencies = [
  "nucleo",
  "once_cell",
  "open",
- "pick",
  "pulldown-cmark",
- "pv",
  "ratatui",
  "same-file",
  "serde",
@@ -2989,15 +2940,20 @@ dependencies = [
  "signal-hook",
  "signal-hook-tokio",
  "smallvec",
- "symbols-panel",
- "tb",
  "tempfile",
  "termini",
  "thiserror 2.0.12",
  "tokio",
  "tokio-stream",
  "toml 0.8.23",
- "ui",
+ "tuikit-diagnostics-panel",
+ "tuikit-files",
+ "tuikit-git-panel",
+ "tuikit-pick",
+ "tuikit-pv",
+ "tuikit-symbols-panel",
+ "tuikit-tb",
+ "tuikit-ui",
  "url",
 ]
 
@@ -4279,20 +4235,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pick"
-version = "0.1.0"
-dependencies = [
- "git-core",
- "grep",
- "ignore",
- "nucleo",
- "pv",
- "ratatui",
- "tui-input",
- "ui",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4403,28 +4345,6 @@ dependencies = [
  "bitflags 2.13.2",
  "memchr",
  "unicase",
-]
-
-[[package]]
-name = "pv"
-version = "0.1.0"
-dependencies = [
- "calamine",
- "csv",
- "git-core",
- "ignore",
- "image",
- "lofty",
- "lopdf",
- "mp4",
- "pulldown-cmark",
- "ratatui",
- "serde",
- "syntect",
- "toml 1.1.8+spec-1.1.0",
- "two-face",
- "ui",
- "unicode-width 0.2.3",
 ]
 
 [[package]]
@@ -5043,15 +4963,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "symbols-panel"
-version = "0.1.0"
-dependencies = [
- "ratatui",
- "tui-input",
- "ui",
-]
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5114,16 +5025,6 @@ dependencies = [
  "thiserror 2.0.12",
  "walkdir",
  "yaml-rust",
-]
-
-[[package]]
-name = "tb"
-version = "0.1.0"
-dependencies = [
- "ratatui",
- "tui-input",
- "ui",
- "unicode-width 0.2.3",
 ]
 
 [[package]]
@@ -5532,6 +5433,117 @@ dependencies = [
 ]
 
 [[package]]
+name = "tuikit-diagnostics-panel"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "tuikit-ui",
+ "unicode-width 0.2.3",
+]
+
+[[package]]
+name = "tuikit-files"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ignore",
+ "imagesize",
+ "infer",
+ "mime_guess",
+ "ratatui",
+ "trash",
+ "tui-input",
+ "tuikit-git-core",
+ "tuikit-pv",
+ "tuikit-ui",
+]
+
+[[package]]
+name = "tuikit-git-core"
+version = "0.1.0"
+dependencies = [
+ "gix 0.90.0",
+]
+
+[[package]]
+name = "tuikit-git-panel"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "tui-input",
+ "tuikit-git-core",
+ "tuikit-pv",
+ "tuikit-ui",
+]
+
+[[package]]
+name = "tuikit-pick"
+version = "0.1.0"
+dependencies = [
+ "grep",
+ "ignore",
+ "nucleo",
+ "ratatui",
+ "tui-input",
+ "tuikit-git-core",
+ "tuikit-pv",
+ "tuikit-ui",
+]
+
+[[package]]
+name = "tuikit-pv"
+version = "0.1.0"
+dependencies = [
+ "calamine",
+ "csv",
+ "ignore",
+ "image",
+ "lofty",
+ "lopdf",
+ "mp4",
+ "pulldown-cmark",
+ "ratatui",
+ "serde",
+ "syntect",
+ "toml 1.1.8+spec-1.1.0",
+ "tuikit-git-core",
+ "tuikit-ui",
+ "two-face",
+ "unicode-width 0.2.3",
+]
+
+[[package]]
+name = "tuikit-symbols-panel"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "tui-input",
+ "tuikit-ui",
+]
+
+[[package]]
+name = "tuikit-tb"
+version = "0.1.0"
+dependencies = [
+ "ratatui",
+ "tui-input",
+ "tuikit-ui",
+ "unicode-width 0.2.3",
+]
+
+[[package]]
+name = "tuikit-ui"
+version = "0.1.0"
+dependencies = [
+ "notify",
+ "ratatui",
+ "serde",
+ "serde_json",
+ "toml 1.1.8+spec-1.1.0",
+ "unicode-width 0.2.3",
+]
+
+[[package]]
 name = "two-face"
 version = "0.5.2+bat-0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5553,18 +5565,6 @@ name = "ucd-trie"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
-
-[[package]]
-name = "ui"
-version = "0.1.0"
-dependencies = [
- "notify",
- "ratatui",
- "serde",
- "serde_json",
- "toml 1.1.8+spec-1.1.0",
- "unicode-width 0.2.3",
-]
 
 [[package]]
 name = "unicase"
