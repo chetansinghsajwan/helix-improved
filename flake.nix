@@ -28,7 +28,7 @@
                         path: _:
                         let
                             rel = lib.removePrefix "${toString ./.}/" (toString path);
-                            inTuikit = rel == "tuikit" || rel == "tuikit/crates" || lib.hasPrefix "tuikit/crates/" rel;
+                            inTuikit = rel == "tuikit" || rel == "tuikit/Cargo.toml" || rel == "tuikit/crates" || lib.hasPrefix "tuikit/crates/" rel;
                         in
                         (
                             rel == (toString ./.)
