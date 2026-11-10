@@ -36,6 +36,7 @@
                                 ".cargo"
                                 "helix-core"
                                 "helix-dap"
+                                "helix-dap-types"
                                 "helix-event"
                                 "helix-loader"
                                 "helix-lsp"
