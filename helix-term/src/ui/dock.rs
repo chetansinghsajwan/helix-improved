@@ -413,7 +413,7 @@ impl Docks {
         // A side dock that has the keyboard grows to fit a long name (up to twice its width), and goes back when it loses it.
         let root = self.root.clone().unwrap_or_default();
         let theme = self.theme().clone();
-        let mut side_width = |dock: &mut Dock| -> u16 {
+        let side_width = |dock: &mut Dock| -> u16 {
             if !dock.shown() {
                 return 0;
             }
@@ -430,7 +430,7 @@ impl Docks {
 
     /// Panels show the file of the focused editor even while they do not have the keyboard.
     fn follow(&mut self, editor: &Editor) {
-        let current = editor.tree.try_get(editor.tree.focus).and_then(|v| editor.document(v.doc)).and_then(|d| d.path()).cloned();
+        let current = editor.tree.try_get(editor.tree.focus).and_then(|v| editor.document(v.doc)).and_then(|d| d.path()).map(|p| p.to_path_buf());
         if current == self.followed {
             return;
         }
