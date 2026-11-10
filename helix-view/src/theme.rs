@@ -8,32 +8,82 @@ use anyhow::{anyhow, Result};
 use helix_core::{hashmap, syntax::Highlight};
 use helix_loader::merge_toml_values;
 use log::warn;
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Deserializer};
+use std::sync::LazyLock;
 use toml::{map::Map, Value};
 
 use crate::graphics::UnderlineStyle;
 pub use crate::graphics::{Color, Modifier, Style};
 
-pub static DEFAULT_THEME_DATA: Lazy<Value> = Lazy::new(|| {
+pub static DEFAULT_THEME_DATA: LazyLock<Value> = LazyLock::new(|| {
     let bytes = include_bytes!("../../theme.toml");
     toml::from_str(str::from_utf8(bytes).unwrap()).expect("Failed to parse base default theme")
 });
 
-pub static BASE16_DEFAULT_THEME_DATA: Lazy<Value> = Lazy::new(|| {
+pub static BASE16_DEFAULT_THEME_DATA: LazyLock<Value> = LazyLock::new(|| {
     let bytes = include_bytes!("../../base16_theme.toml");
     toml::from_str(str::from_utf8(bytes).unwrap()).expect("Failed to parse base 16 default theme")
 });
 
-pub static DEFAULT_THEME: Lazy<Theme> = Lazy::new(|| Theme {
+pub static DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| Theme {
     name: "default".into(),
     ..Theme::from(DEFAULT_THEME_DATA.clone())
 });
 
-pub static BASE16_DEFAULT_THEME: Lazy<Theme> = Lazy::new(|| Theme {
+pub static BASE16_DEFAULT_THEME: LazyLock<Theme> = LazyLock::new(|| Theme {
     name: "base16_default".into(),
     ..Theme::from(BASE16_DEFAULT_THEME_DATA.clone())
 });
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Mode {
+    Dark,
+    Light,
+}
+
+#[cfg(feature = "term")]
+impl From<termina::escape::csi::ThemeMode> for Mode {
+    fn from(mode: termina::escape::csi::ThemeMode) -> Self {
+        match mode {
+            termina::escape::csi::ThemeMode::Dark => Self::Dark,
+            termina::escape::csi::ThemeMode::Light => Self::Light,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged, deny_unknown_fields, rename_all = "kebab-case")]
+pub enum Config {
+    Constant(String),
+    Adaptive {
+        light: String,
+        dark: String,
+        /// A theme to choose when the terminal did not declare either light or dark mode.
+        /// When not specified the dark theme is preferred.
+        fallback: Option<String>,
+    },
+}
+
+impl Config {
+    pub fn choose(&self, preference: Option<Mode>) -> &str {
+        match self {
+            Config::Constant(theme) => theme,
+            Config::Adaptive {
+                light,
+                dark,
+                fallback,
+            } => match preference {
+                Some(Mode::Light) => light,
+                Some(Mode::Dark) => dark,
+                None => fallback.as_ref().unwrap_or(dark),
+            },
+        }
+    }
+
+    pub fn is_adaptive(&self) -> bool {
+        matches!(self, Self::Adaptive { .. })
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Loader {
@@ -227,6 +277,10 @@ pub struct Theme {
     // tree-sitter highlight styles are stored in a Vec to optimize lookups
     scopes: Vec<String>,
     highlights: Vec<Style>,
+    /// Reverse map from scope string to its `Highlight` index. `find_highlight_exact`
+    /// is called many times per frame, so we optimize lookups.
+    scope_index: HashMap<String, Highlight>,
+    rainbow_length: usize,
 }
 
 impl From<Value> for Theme {
@@ -253,12 +307,20 @@ impl<'de> Deserialize<'de> for Theme {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn build_theme_values(
     mut values: Map<String, Value>,
-) -> (HashMap<String, Style>, Vec<String>, Vec<Style>, Vec<String>) {
+) -> (
+    HashMap<String, Style>,
+    Vec<String>,
+    Vec<Style>,
+    usize,
+    Vec<String>,
+) {
     let mut styles = HashMap::new();
     let mut scopes = Vec::new();
     let mut highlights = Vec::new();
+    let mut rainbow_length = 0;
 
     let mut warnings = Vec::new();
 
@@ -277,6 +339,27 @@ fn build_theme_values(
     styles.reserve(values.len());
     scopes.reserve(values.len());
     highlights.reserve(values.len());
+
+    for (i, style) in values
+        .remove("rainbow")
+        .and_then(|value| match palette.parse_style_array(value) {
+            Ok(styles) => Some(styles),
+            Err(err) => {
+                warnings.push(err);
+                None
+            }
+        })
+        .unwrap_or_else(default_rainbow)
+        .into_iter()
+        .enumerate()
+    {
+        let name = format!("rainbow.{i}");
+        styles.insert(name.clone(), style);
+        scopes.push(name);
+        highlights.push(style);
+        rainbow_length += 1;
+    }
+
     for (name, style_value) in values {
         let mut style = Style::default();
         if let Err(err) = palette.parse_style(&mut style, style_value) {
@@ -289,9 +372,19 @@ fn build_theme_values(
         highlights.push(style);
     }
 
-    (styles, scopes, highlights, warnings)
+    (styles, scopes, highlights, rainbow_length, warnings)
 }
 
+fn default_rainbow() -> Vec<Style> {
+    vec![
+        Style::default().fg(Color::Red),
+        Style::default().fg(Color::Yellow),
+        Style::default().fg(Color::Green),
+        Style::default().fg(Color::Blue),
+        Style::default().fg(Color::Cyan),
+        Style::default().fg(Color::Magenta),
+    ]
+}
 impl Theme {
     /// To allow `Highlight` to represent arbitrary RGB colors without turning it into an enum,
     /// we interpret the last 256^3 numbers as RGB.
@@ -355,10 +448,7 @@ impl Theme {
     }
 
     pub fn find_highlight_exact(&self, scope: &str) -> Option<Highlight> {
-        self.scopes()
-            .iter()
-            .position(|s| s == scope)
-            .map(|idx| Highlight::new(idx as u32))
+        self.scope_index.get(scope).copied()
     }
 
     pub fn find_highlight(&self, mut scope: &str) -> Option<Highlight> {
@@ -382,6 +472,10 @@ impl Theme {
         })
     }
 
+    pub fn rainbow_length(&self) -> usize {
+        self.rainbow_length
+    }
+
     fn from_toml(value: Value) -> (Self, Vec<String>) {
         if let Value::Table(table) = value {
             Theme::from_keys(table)
@@ -392,12 +486,21 @@ impl Theme {
     }
 
     fn from_keys(toml_keys: Map<String, Value>) -> (Self, Vec<String>) {
-        let (styles, scopes, highlights, load_errors) = build_theme_values(toml_keys);
+        let (styles, scopes, highlights, rainbow_length, load_errors) =
+            build_theme_values(toml_keys);
+
+        let scope_index = scopes
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.clone(), Highlight::new(i as u32)))
+            .collect();
 
         let theme = Self {
             styles,
             scopes,
             highlights,
+            scope_index,
+            rainbow_length,
             ..Default::default()
         };
         (theme, load_errors)
@@ -446,7 +549,7 @@ impl ThemePalette {
 
     pub fn string_to_rgb(s: &str) -> Result<Color, String> {
         if s.starts_with('#') {
-            Self::hex_string_to_rgb(s)
+            Color::from_hex(s).map_err(|e| format!("{e}: {s}"))
         } else {
             Self::ansi_string_to_rgb(s)
         }
@@ -457,20 +560,6 @@ impl ThemePalette {
             return Ok(Color::Indexed(index));
         }
         Err(format!("Malformed ANSI: {}", s))
-    }
-
-    fn hex_string_to_rgb(s: &str) -> Result<Color, String> {
-        if s.len() >= 7 {
-            if let (Ok(red), Ok(green), Ok(blue)) = (
-                u8::from_str_radix(&s[1..3], 16),
-                u8::from_str_radix(&s[3..5], 16),
-                u8::from_str_radix(&s[5..7], 16),
-            ) {
-                return Ok(Color::Rgb(red, green, blue));
-            }
-        }
-
-        Err(format!("Malformed hexcode: {}", s))
     }
 
     fn parse_value_as_str(value: &Value) -> Result<&str, String> {
@@ -540,6 +629,21 @@ impl ThemePalette {
             *style = style.fg(self.parse_color(value)?);
         }
         Ok(())
+    }
+
+    fn parse_style_array(&self, value: Value) -> Result<Vec<Style>, String> {
+        let mut styles = Vec::new();
+
+        for v in value
+            .as_array()
+            .ok_or_else(|| format!("Could not parse value as an array: '{value}'"))?
+        {
+            let mut style = Style::default();
+            self.parse_style(&mut style, v.clone())?;
+            styles.push(style);
+        }
+
+        Ok(styles)
     }
 }
 

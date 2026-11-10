@@ -3,8 +3,14 @@
 Vendored copy of helix with our changes, kept here so the fork, the shared
 crates (`../crates`) and the Nix build live in one repository.
 
-- **Upstream base:** https://github.com/helix-editor/helix, tag `25.07.1`
-  (commit `a05c151`). This is the version nixpkgs ships.
+- **Upstream base:** https://github.com/helix-editor/helix, `master` at `ba40e547`
+  (2026-09-29), 989 commits past the `25.07.1` release (`a05c151`). No release since
+  `25.07.1`, so this no longer matches the nixpkgs helix version.
+- **Terminal backend:** stays on crossterm. Upstream `master` moved to `termina`; its
+  backend files are present but off. `helix-term` has a marker feature `termina` that
+  selects it (`application.rs` gates on it); `helix-tui`'s crossterm backend and the
+  crossterm conversions in `helix-view` are gated on `crossterm` rather than `windows`.
+  Switch only when termina has matured.
 - **Not vendored:** upstream's `.git`, `.github`, `book/`, `docs/`, `contrib/`,
   `CHANGELOG.md`, `.envrc`, logos and its Nix files (this repo's formatters skip
   `home/helix/**`, see `treefmt.nix`). Fetched grammars (`runtime/grammars/`)
