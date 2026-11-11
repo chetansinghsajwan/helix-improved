@@ -34,6 +34,11 @@ crates (`../crates`) and the Nix build live in one repository.
   grammar repository no longer exists). Run with `HELIX_RUNTIME=$PWD/runtime`.
   `rust-toolchain.toml` still pins 1.82, which is too old for `gix`; use a newer
   toolchain (nixpkgs cargo ignores the pin).
+- **Grammars:** `grammars.json` pins every grammar to the revision in this fork's
+  `languages.toml` (nixpkgs' wrapper builds them from it). Regenerate after a sync:
+  `nix shell nixpkgs#nurl nixpkgs#python3 -c python3 <nixpkgs>/pkgs/by-name/he/helix/generate_grammars.py languages.toml -o new.json`,
+  then keep only the names already in `grammars.json` (nixpkgs has no grammar
+  package for the rest, so languages new in upstream have no grammar here).
 - **Upgrading helix:** rebase the changes above onto the new upstream tag; the
   patch is small and confined to `helix-term`.
 

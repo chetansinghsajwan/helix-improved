@@ -2,9 +2,9 @@
 #
 # The unwrapped editor is built here. The runtime directory (queries plus the
 # tree-sitter grammars built by Nix) comes from nixpkgs' own `helix` wrapper,
-# which we reuse by swapping in our unwrapped build. That is valid because the
-# fork is based on the same upstream tag nixpkgs ships (see FORK.md);
-# when nixpkgs moves to another helix version, rebase the fork first.
+# which we reuse by swapping in our unwrapped build and our own `grammars.json`
+# (revisions from the fork's languages.toml, so they match its queries; see
+# FORK.md for how to regenerate it).
 {
     lib,
     craneLib,
@@ -71,4 +71,5 @@ helix.override {
     helix-unwrapped = unwrapped // {
         src = helixSrc;
     };
+    lockedGrammars = lib.importJSON ./grammars.json;
 }
