@@ -38,7 +38,9 @@ crates (`../crates`) and the Nix build live in one repository.
   `languages.toml` (nixpkgs' wrapper builds them from it). Regenerate after a sync:
   `nix shell nixpkgs#nurl nixpkgs#python3 -c python3 <nixpkgs>/pkgs/by-name/he/helix/generate_grammars.py languages.toml -o new.json`,
   then keep only the names already in `grammars.json` (nixpkgs has no grammar
-  package for the rest, so languages new in upstream have no grammar here).
+  package for the rest, so languages new in upstream have no grammar here). Where nixpkgs
+  patches a grammar that upstream already fixed the build fails; keep that one at its
+  old pin (`tlaplus`).
 - **Upgrading helix:** rebase the changes above onto the new upstream tag; the
   patch is small and confined to `helix-term`.
 

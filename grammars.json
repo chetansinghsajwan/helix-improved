@@ -2585,10 +2585,10 @@
   "tlaplus": {
     "nurl": {
       "args": {
-        "hash": "sha256-nqbIpLHL2m+Mq6kI0hzVBrfyv5Xwdz+oeOFUslN5VsI=",
+        "hash": "sha256-Oc+VYBLP1XcfMTWmcYyJRXzq1Ty838TnF2fPGIsjtOE=",
         "owner": "tlaplus-community",
         "repo": "tree-sitter-tlaplus",
-        "rev": "add40814fda369f6efd989977b2c498aaddde984"
+        "rev": "4ba91b07b97741a67f61221d0d50e6d962e4987e"
       },
       "fetcher": "fetchFromGitHub"
     },
