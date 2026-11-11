@@ -269,9 +269,21 @@ impl View {
         let (scrolloff_top, scrolloff_bottom) = if CENTERING {
             (0, 0)
         } else {
+            // The pinned scope rows (see `sticky-context`) cover the top of the view, so the cursor
+            // must stay below them.
+            let sticky = {
+                let config = doc.config.load();
+                if config.sticky_context.enable && doc.syntax().is_some() {
+                    config.sticky_context.max_lines
+                } else {
+                    0
+                }
+            };
             (
                 // - 1 from the top so we have at least one gap in the middle.
-                scrolloff.min(viewport.height.saturating_sub(1) as usize / 2),
+                scrolloff
+                    .max(sticky)
+                    .min(viewport.height.saturating_sub(1) as usize / 2),
                 scrolloff.min(viewport.height as usize / 2),
             )
         };

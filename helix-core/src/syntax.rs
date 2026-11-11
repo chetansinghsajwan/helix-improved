@@ -1069,6 +1069,42 @@ impl TextObjectQuery {
     }
 }
 
+impl TextObjectQuery {
+    /// Nodes captured as any of `capture_names` by a match that intersects `byte_range`.
+    ///
+    /// Unlike [`Self::capture_nodes_any`] this looks at every capture name that exists, and only
+    /// visits the part of the tree around `byte_range`, so it is cheap to ask about one position.
+    pub fn capture_nodes_in_range<'a>(
+        &'a self,
+        capture_names: &[&str],
+        node: &Node<'a>,
+        slice: RopeSlice<'a>,
+        byte_range: ops::Range<u32>,
+    ) -> Vec<CapturedNode<'a>> {
+        let captures: Vec<_> = capture_names
+            .iter()
+            .filter_map(|cap| self.query.get_capture(cap))
+            .collect();
+        if captures.is_empty() {
+            return Vec::new();
+        }
+        let mut cursor = InactiveQueryCursor::new(byte_range, TREE_SITTER_MATCH_LIMIT)
+            .execute_query(&self.query, node, RopeInput::new(slice));
+        let mut found = Vec::new();
+        while let Some(mat) = cursor.next_match() {
+            for &capture in &captures {
+                let mut nodes: Vec<_> = mat.nodes_for_capture(capture).cloned().collect();
+                match nodes.len() {
+                    0 => {}
+                    1 => found.push(CapturedNode::Single(nodes.remove(0))),
+                    _ => found.push(CapturedNode::Grouped(nodes)),
+                }
+            }
+        }
+        found
+    }
+}
+
 #[derive(Debug)]
 pub struct TagQuery {
     pub query: Query,

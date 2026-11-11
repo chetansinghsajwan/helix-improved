@@ -389,6 +389,8 @@ pub struct Config {
     pub minimap: bool,
     /// Its width in columns (each column is two dots wide). Defaults to `10`.
     pub minimap_width: u16,
+    /// Pin the scopes (functions, classes) around the first visible line to the top of the view.
+    pub sticky_context: StickyContextConfig,
     /// Show a preview of the highlighted file beside the files pane while exploring it. Defaults to `true`.
     pub dock_preview: bool,
     /// Vertical indent width guides.
@@ -1104,6 +1106,25 @@ impl Default for WhitespaceCharacters {
     }
 }
 
+/// The scopes pinned at the top of a view, see `sticky-context`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "kebab-case", deny_unknown_fields)]
+pub struct StickyContextConfig {
+    /// Show them. Defaults to `true`; it needs a language with tree-sitter textobjects.
+    pub enable: bool,
+    /// At most this many rows, the innermost scopes win. Defaults to `3`.
+    pub max_lines: usize,
+}
+
+impl Default for StickyContextConfig {
+    fn default() -> Self {
+        Self {
+            enable: true,
+            max_lines: 3,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct IndentGuidesConfig {
@@ -1248,6 +1269,7 @@ impl Default for Config {
             bufferline: BufferLine::default(),
             minimap: true,
             minimap_width: 10,
+            sticky_context: StickyContextConfig::default(),
             dock_preview: true,
             indent_guides: IndentGuidesConfig::default(),
             color_modes: false,

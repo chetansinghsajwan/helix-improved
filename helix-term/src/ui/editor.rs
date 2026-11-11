@@ -18,6 +18,7 @@ use helix_core::{
     graphemes::{next_grapheme_boundary, prev_grapheme_boundary},
     movement::Direction,
     syntax::{self, OverlayHighlights},
+    textobject::enclosing_scope_lines,
     text_annotations::TextAnnotations,
     unicode::width::UnicodeWidthStr,
     visual_offset_from_block, Change, Position, Range, Selection, Transaction,
@@ -25,10 +26,11 @@ use helix_core::{
 use helix_view::{
     annotations::diagnostics::DiagnosticFilter,
     document::{Mode, SCRATCH_BUFFER_NAME},
-    editor::{CompleteAction, CursorShapeConfig},
+    editor::{CompleteAction, CursorShapeConfig, StickyContextConfig},
     graphics::{Color, CursorKind, Modifier, Rect, Style},
     input::{KeyEvent, MouseButton, MouseEvent, MouseEventKind},
     keyboard::{KeyCode, KeyModifiers},
+    view::ViewPosition,
     Document, Editor, Theme, View,
 };
 use std::{mem::take, num::NonZeroUsize, ops, path::PathBuf, rc::Rc};
@@ -301,6 +303,11 @@ impl EditorView {
             decorations,
         );
 
+        if config.sticky_context.enable {
+            let lines = Self::sticky_scope_lines(doc, view, &config.sticky_context, &loader);
+            Self::render_sticky_context(editor, doc, view, surface, &lines);
+        }
+
         // if we're not at the edge of the screen, draw a right border
         if viewport.right() != view.area.right() {
             let x = area.right();
@@ -339,6 +346,97 @@ impl EditorView {
             statusline::RenderContext::new(editor, doc, view, is_focused, &self.spinners);
 
         statusline::render(&mut context, statusline_area, surface);
+    }
+
+    /// The start lines of the scopes pinned at the top of the view, outermost first.
+    ///
+    /// The pinned rows cover the first lines of the view, so the scopes are those of the first line
+    /// left uncovered. That line depends on how many rows are pinned, hence the few rounds.
+    fn sticky_scope_lines(
+        doc: &Document,
+        view: &View,
+        config: &StickyContextConfig,
+        loader: &syntax::Loader,
+    ) -> Vec<usize> {
+        let max = config.max_lines.min(view.inner_height().saturating_sub(1) / 2);
+        let Some(syntax) = doc.syntax() else {
+            return Vec::new();
+        };
+        if max == 0 {
+            return Vec::new();
+        }
+        let text = doc.text().slice(..);
+        let top = text.char_to_line(doc.view_offset(view.id).anchor.min(text.len_chars()));
+        let mut lines = Vec::new();
+        for _ in 0..=max {
+            let mut found = enclosing_scope_lines(text, top + lines.len(), syntax, loader);
+            if found.len() > max {
+                found.drain(..found.len() - max);
+            }
+            let stable = found.len() == lines.len();
+            lines = found;
+            if stable {
+                break;
+            }
+        }
+        lines
+    }
+
+    /// Draw the pinned scope lines over the top rows of the view, with their line numbers.
+    fn render_sticky_context(
+        editor: &Editor,
+        doc: &Document,
+        view: &View,
+        surface: &mut Surface,
+        lines: &[usize],
+    ) {
+        if lines.is_empty() {
+            return;
+        }
+        let theme = &editor.theme;
+        let loader = editor.syn_loader.load();
+        let inner = view.inner_area(doc);
+        let style = theme
+            .try_get("ui.sticky")
+            .or_else(|| theme.try_get("ui.menu"))
+            .unwrap_or_else(|| theme.get("ui.statusline"));
+        let background = style.bg.map(|bg| Style::default().bg(bg));
+        let linenr = style.patch(theme.get("ui.linenr"));
+        let gutter = view.gutter_offset(doc);
+        let text = doc.text().slice(..);
+        let annotations = TextAnnotations::default();
+
+        for (i, &line) in lines.iter().enumerate() {
+            let y = inner.y + i as u16;
+            if y >= inner.bottom() {
+                break;
+            }
+            let row = Rect::new(inner.x, y, inner.width, 1);
+            surface.clear_with(row, style);
+            if gutter > 0 {
+                let cell = Rect::new(view.area.x, y, gutter, 1);
+                surface.clear_with(cell, style);
+                let number = format!("{:>width$} ", line + 1, width = gutter as usize - 1);
+                surface.set_stringn(cell.x, y, &number, gutter as usize, linenr);
+            }
+            let anchor = text.line_to_char(line);
+            render_document(
+                surface,
+                row,
+                doc,
+                None,
+                ViewPosition { anchor, horizontal_offset: 0, vertical_offset: 0 },
+                &annotations,
+                Self::doc_syntax_highlighter(doc, anchor, 1, &loader),
+                vec![Self::overlay_syntax_highlights(doc, anchor, 1, &annotations)],
+                theme,
+                DecorationManager::default(),
+            );
+            // Text drawn with the theme's own background would hide the pinned rows.
+            if let Some(background) = background {
+                surface.set_style(row, background);
+            }
+        }
     }
 
     pub fn render_rulers(

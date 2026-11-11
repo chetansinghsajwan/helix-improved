@@ -292,6 +292,50 @@ pub fn textobject_treesitter(
     get_range().unwrap_or(range)
 }
 
+/// Start lines of the scopes (functions, classes) that enclose `line` and begin above it, outermost
+/// first. These are what an editor pins at the top of the view while `line` is the first one shown.
+pub fn enclosing_scope_lines(
+    text: RopeSlice,
+    line: usize,
+    syntax: &Syntax,
+    loader: &syntax::Loader,
+) -> Vec<usize> {
+    if line >= text.len_lines() {
+        return Vec::new();
+    }
+    let line_start = text.line_to_char(line);
+    let line_end = text.line_to_char((line + 1).min(text.len_lines()));
+    // The first non-blank character: the position the line is "about".
+    let pos = text
+        .chars_at(line_start)
+        .take(line_end - line_start)
+        .position(|c| !c.is_whitespace())
+        .map_or(line_start, |i| line_start + i);
+    let byte = text.char_to_byte(pos) as u32;
+    let line_start_byte = text.char_to_byte(line_start);
+
+    let layer = syntax.layer_for_byte_range(byte, byte);
+    let root = syntax.tree_for_byte_range(byte, byte).root_node();
+    let Some(query) = loader.textobject_query(syntax.layer(layer).language) else {
+        return Vec::new();
+    };
+    let mut starts: Vec<usize> = query
+        .capture_nodes_in_range(&["function.around", "class.around"], &root, text, byte..byte + 1)
+        .iter()
+        .filter(|node| node.byte_range().contains(&(byte as usize)))
+        .map(|node| match node {
+            // A group is leading comments or attributes plus the item itself, last.
+            syntax::CapturedNode::Grouped(nodes) => nodes.last().unwrap().start_byte() as usize,
+            syntax::CapturedNode::Single(node) => node.start_byte() as usize,
+        })
+        .filter(|&start| start < line_start_byte)
+        .collect();
+    starts.sort_unstable();
+    let mut lines: Vec<usize> = starts.into_iter().map(|b| text.byte_to_line(b)).collect();
+    lines.dedup();
+    lines
+}
+
 #[cfg(test)]
 mod test {
     use super::TextObject::*;
@@ -299,6 +343,31 @@ mod test {
 
     use crate::Range;
     use ropey::Rope;
+
+    #[test]
+    fn test_enclosing_scope_lines() {
+        use std::sync::LazyLock;
+
+        static LOADER: LazyLock<syntax::Loader> = LazyLock::new(crate::config::default_lang_loader);
+
+        let source = ropey::Rope::from_str(
+            "struct S;\n\nimpl S {\n    fn outer(&self) {\n        let x = 1;\n        let y = 2;\n    }\n}\n",
+        );
+        let text = source.slice(..);
+        let language = LOADER.language_for_name("rust").unwrap();
+        let syntax = Syntax::new(text, language, &LOADER).unwrap();
+        let at = |line| enclosing_scope_lines(text, line, &syntax, &LOADER);
+
+        // Top level, and the line a scope starts on: nothing is above it.
+        assert_eq!(at(0), Vec::<usize>::new());
+        assert_eq!(at(2), Vec::<usize>::new());
+        // Inside the impl, then inside the function in it (outermost first).
+        assert_eq!(at(3), vec![2]);
+        assert_eq!(at(4), vec![2, 3]);
+        assert_eq!(at(5), vec![2, 3]);
+        // The closing brace of the function is still inside it.
+        assert_eq!(at(6), vec![2, 3]);
+    }
 
     #[test]
     fn test_textobject_word() {
