@@ -34,6 +34,11 @@ crates (`../crates`) and the Nix build live in one repository.
   grammar repository no longer exists). Run with `HELIX_RUNTIME=$PWD/runtime`.
   `rust-toolchain.toml` still pins 1.82, which is too old for `gix`; use a newer
   toolchain (nixpkgs cargo ignores the pin).
+- **Sticky context:** `editor.sticky-context` (`enable`, `max-lines`) pins the scopes around the
+  first visible line (functions and classes, from the `function.around` and `class.around`
+  textobject queries) at the top of each view. Logic in `helix-core/src/textobject.rs`
+  (`enclosing_scope_lines`), drawing in `ui/editor.rs`, scrolloff reserve in `view.rs`;
+  theme key `ui.sticky` (falls back to `ui.menu`).
 - **Grammars:** `grammars.json` pins every grammar to the revision in this fork's
   `languages.toml` (nixpkgs' wrapper builds them from it). Regenerate after a sync:
   `nix shell nixpkgs#nurl nixpkgs#python3 -c python3 <nixpkgs>/pkgs/by-name/he/helix/generate_grammars.py languages.toml -o new.json`,
