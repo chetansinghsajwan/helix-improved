@@ -52,6 +52,27 @@ fn blend(over: Color, base: Color, percent: u32) -> Color {
     }
 }
 
+/// The lines in `from..to` that git shows as added or changed, with the theme color of their marker
+/// (removals have no line to color).
+pub fn changed_lines(doc: &Document, theme: &helix_view::Theme, from: usize, to: usize) -> Vec<(usize, Color)> {
+    let Some(diff) = doc.diff_handle() else { return Vec::new() };
+    let diff = diff.load();
+    let (plus, delta) = (theme.get("diff.plus").fg, theme.get("diff.delta").fg);
+    let mut out = Vec::new();
+    for h in diff.hunks_intersecting_line_ranges(std::iter::once((from, to))) {
+        let color = if h.is_pure_removal() { None } else if h.is_pure_insertion() { plus } else { delta };
+        if let Some(c) = color {
+            out.extend((h.after.start as usize..h.after.end as usize).map(|l| (l, c)));
+        }
+    }
+    out
+}
+
+/// A marker color faded into the theme background, to tint whole lines with.
+pub fn fade(theme: &helix_view::Theme, color: Color) -> Color {
+    blend(color, theme.get("ui.background").bg.unwrap_or(Color::Rgb(0, 0, 0)), 18)
+}
+
 /// The braille bit of the dot at column `c` (0..2) and row `r` (0..4) of a cell.
 fn bit(c: usize, r: usize) -> u32 {
     const BITS: [[u32; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
@@ -126,6 +147,7 @@ pub fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut Surfac
             }
         }
     }
+    let changed = changed_lines(doc, theme, layout.start, end);
     let (error, warning, other) = (style_fg("error"), style_fg("warning"), style_fg("info"));
     let mut worst: std::collections::HashMap<usize, u8> = Default::default();
     for d in doc.diagnostics() {
@@ -180,6 +202,10 @@ pub fn render(editor: &Editor, doc: &Document, view: &View, surface: &mut Surfac
             let mut style = Style::default().fg(dim);
             if on_screen.start < cell_lines.end && cell_lines.start < on_screen.end {
                 style = style.fg(bright).bg(band);
+            }
+            if let Some((_, c)) = changed.iter().find(|(l, _)| cell_lines.contains(l)) {
+                let tint = fade(theme, *c);
+                style = style.bg(if on_screen.start < cell_lines.end && cell_lines.start < on_screen.end { blend(tint, band, 50) } else { tint });
             }
             if cursor_lines.iter().any(|l| cell_lines.contains(l)) {
                 style = style.fg(bright).bg(cursor_band);
