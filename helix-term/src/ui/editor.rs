@@ -176,6 +176,24 @@ impl EditorView {
         let text_annotations = view.text_annotations(doc, Some(theme));
         let mut decorations = DecorationManager::default();
 
+        // Added and changed lines get a faded tint of their git marker color (the cursor line goes over it).
+        {
+            let from = doc.text().char_to_line(view_offset.anchor.min(doc.text().len_chars()));
+            let tints: std::collections::HashMap<usize, Color> = super::minimap::changed_lines(doc, theme, from, from + view.inner_height() + 1)
+                .into_iter()
+                .map(|(l, c)| (l, super::minimap::fade(theme, c)))
+                .collect();
+            if !tints.is_empty() {
+                let width = view.area.width.saturating_sub(view.minimap);
+                let x = view.area.x;
+                decorations.add_decoration(move |renderer: &mut TextRenderer, pos: LinePos| {
+                    if let Some(c) = tints.get(&pos.doc_line) {
+                        renderer.set_style(Rect::new(x, pos.visual_line, width, 1), Style::default().bg(*c));
+                    }
+                });
+            }
+        }
+
         if is_focused && config.cursorline {
             decorations.add_decoration(Self::cursorline(doc, view, theme));
         }
@@ -1062,7 +1080,8 @@ impl EditorView {
 
         let primary_style = theme.get("ui.cursorline.primary");
         let secondary_style = theme.get("ui.cursorline.secondary");
-        let viewport = view.area;
+        // The minimap keeps its own columns at the right edge.
+        let viewport = view.area.clip_right(view.minimap);
 
         move |renderer: &mut TextRenderer, pos: LinePos| {
             let area = Rect::new(viewport.x, pos.visual_line, viewport.width, 1);
