@@ -1011,6 +1011,11 @@ pub struct TextObjectQuery {
 }
 
 impl TextObjectQuery {
+    /// Whether the query defines the capture `name` (like `scope.around`).
+    pub fn has_capture(&self, name: &str) -> bool {
+        self.query.get_capture(name).is_some()
+    }
+
     pub fn new(query: Query) -> Self {
         Self { query }
     }

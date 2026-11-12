@@ -36,7 +36,9 @@ crates (`../crates`) and the Nix build live in one repository.
   toolchain (nixpkgs cargo ignores the pin).
 - **Sticky context:** `editor.sticky-context` (`enable`, `max-lines`) pins the scopes around the
   first visible line (functions and classes, from the `function.around` and `class.around`
-  textobject queries) at the top of each view. Logic in `helix-core/src/textobject.rs`
+  textobject queries) at the top of each view. A language can define a `scope.around`
+  capture to say exactly what to pin (Nix does: attribute bindings, not lambdas); then only
+  that capture is used. Logic in `helix-core/src/textobject.rs`
   (`enclosing_scope_lines`), drawing in `ui/editor.rs`, scrolloff reserve in `view.rs`;
   theme key `ui.sticky` (falls back to `ui.menu`).
 - **Grammars:** `grammars.json` pins every grammar to the revision in this fork's
