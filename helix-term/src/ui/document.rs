@@ -48,6 +48,7 @@ pub fn render_document(
         viewport,
     );
     renderer.active_guide = cursor.and_then(|c| active_guide(doc, c));
+    renderer.set_blank_indents(doc, offset.anchor, viewport.height as usize);
     render_text(
         &mut renderer,
         doc.text().slice(..),
@@ -193,6 +194,9 @@ pub struct TextRenderer<'a> {
     /// The scope the cursor is in, as `(first line, end line, guide column)`: its guide is drawn in the accent.
     pub active_guide: Option<(usize, usize, usize)>,
     active_guide_style: Style,
+    /// For the blank lines near the view, `(first line, guide depth in cells)`: a blank line takes the smaller of
+    /// its neighbors' depths, the rule the active guide uses, so a guide runs as far as its highlighted one.
+    blank_indents: Option<(usize, Vec<Option<usize>>)>,
     pub viewport: Rect,
     pub offset: Position,
 }
@@ -274,6 +278,7 @@ impl<'a> TextRenderer<'a> {
             draw_indent_guides: editor_config.indent_guides.render,
             active_guide: None,
             active_guide_style: accent_style(),
+            blank_indents: None,
             viewport,
             offset,
         }
@@ -410,6 +415,8 @@ impl<'a> TextRenderer<'a> {
             return;
         }
         row -= self.offset.row as u16;
+        let blank = self.blank_indents.as_ref().and_then(|(first, v)| v.get(doc_line.checked_sub(*first)?).copied().flatten());
+        let indent_level = blank.unwrap_or(indent_level);
 
         // Don't draw indent guides outside of view
         let end_indent = min(
@@ -428,6 +435,21 @@ impl<'a> TextRenderer<'a> {
             let style = if active { self.indent_guide_style.patch(self.active_guide_style) } else { self.indent_guide_style };
             self.surface.set_string(x, y, &self.indent_guide_char, style);
         }
+    }
+
+    /// Work out how deep the guides of the blank lines near the view run (see `blank_indents`).
+    fn set_blank_indents(&mut self, doc: &Document, anchor: usize, height: usize) {
+        if !self.draw_indent_guides {
+            return;
+        }
+        let text = doc.text().slice(..);
+        let top = text.char_to_line(anchor.min(text.len_chars()));
+        let first = top.saturating_sub(SCOPE_WINDOW);
+        let last = (top + height + SCOPE_WINDOW).min(text.len_lines());
+        let own = line_indents(doc, first, last);
+        let filled = tui_design::tree::indent_levels(&own);
+        let blank = own.iter().zip(filled).map(|(o, f)| o.is_none().then_some(f)).collect();
+        self.blank_indents = Some((first, blank));
     }
 
     pub fn set_string(&mut self, x: u16, y: u16, string: &str, style: Style) {
@@ -610,7 +632,17 @@ fn active_guide(doc: &Document, cursor: usize) -> Option<(usize, usize, usize)> 
     let first = line.saturating_sub(SCOPE_WINDOW);
     let last = (line + SCOPE_WINDOW).min(text.len_lines());
     let tab = doc.tab_width().max(1);
-    let indents: Vec<Option<usize>> = (first..last)
+    let indents = line_indents(doc, first, last);
+    let unit = doc.indent_style.indent_width(tab) as usize;
+    let s = tui_design::tree::code_scope(&indents, unit, line - first)?;
+    Some((first + s.from, first + s.to, s.col))
+}
+
+/// The leading whitespace in cells of each line in `first..last` (`None` for a blank line).
+fn line_indents(doc: &Document, first: usize, last: usize) -> Vec<Option<usize>> {
+    let text = doc.text().slice(..);
+    let tab = doc.tab_width().max(1);
+    (first..last)
         .map(|l| {
             let mut cells = 0;
             for ch in text.line(l).chars() {
@@ -623,8 +655,5 @@ fn active_guide(doc: &Document, cursor: usize) -> Option<(usize, usize, usize)> 
             }
             None
         })
-        .collect();
-    let unit = doc.indent_style.indent_width(tab) as usize;
-    let s = tui_design::tree::code_scope(&indents, unit, line - first)?;
-    Some((first + s.from, first + s.to, s.col))
+        .collect()
 }
