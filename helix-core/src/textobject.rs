@@ -319,8 +319,15 @@ pub fn enclosing_scope_lines(
     let Some(query) = loader.textobject_query(syntax.layer(layer).language) else {
         return Vec::new();
     };
+    // A language that defines `scope.around` says exactly what to pin (Nix: attribute names, not
+    // its lambdas); otherwise functions and classes are the scopes.
+    let names: &[&str] = if query.has_capture("scope.around") {
+        &["scope.around"]
+    } else {
+        &["function.around", "class.around"]
+    };
     let mut starts: Vec<usize> = query
-        .capture_nodes_in_range(&["function.around", "class.around"], &root, text, byte..byte + 1)
+        .capture_nodes_in_range(names, &root, text, byte..byte + 1)
         .iter()
         .filter(|node| node.byte_range().contains(&(byte as usize)))
         .map(|node| match node {
