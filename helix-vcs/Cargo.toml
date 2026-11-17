@@ -18,13 +18,14 @@ parking_lot.workspace = true
 arc-swap.workspace = true
 
 gix = { version = "0.85.0", features = ["attributes", "status", "max-performance", "sha1"], default-features = false, optional = true }
+notify = { version = "8", default-features = false, features = ["macos_fsevent"], optional = true }
 imara-diff =  "0.2.0"
 anyhow = "1"
 
 log = "0.4"
 
 [features]
-git = ["gix"]
+git = ["gix", "notify"]
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -22,6 +22,8 @@ pub mod diagnostics;
 mod document_colors;
 mod document_highlight;
 mod document_links;
+#[cfg(feature = "git")]
+mod git_watch;
 mod prompt;
 mod signature_help;
 mod snippet;
@@ -64,5 +66,7 @@ pub fn setup(config: Arc<ArcSwap<Config>>) -> Handlers {
     document_links::register_hooks(&handlers);
     prompt::register_hooks(&handlers);
     workspace_trust::register_hooks(&handlers);
+    #[cfg(feature = "git")]
+    git_watch::register_hooks(&handlers);
     handlers
 }

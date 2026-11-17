@@ -3106,6 +3106,7 @@ dependencies = [
  "helix-event",
  "imara-diff",
  "log",
+ "notify",
  "parking_lot",
  "tempfile",
  "tokio",

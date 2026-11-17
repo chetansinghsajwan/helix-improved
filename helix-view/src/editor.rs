@@ -2221,6 +2221,31 @@ impl Editor {
         self._refresh();
     }
 
+    /// Re-reads the diff base and head name of every open document that lives in the repository
+    /// whose VCS directory is `vcs_dir`. Called when `HEAD`, the index or a ref changed outside the
+    /// editor, so the gutter and line highlights follow `git add`, `commit` and `checkout`.
+    pub fn refresh_diff_bases(&mut self, vcs_dir: &Path) {
+        for doc in self.documents.values_mut() {
+            let Some(path) = doc.path().map(ToOwned::to_owned) else {
+                continue;
+            };
+            let trust_full = self
+                .workspace_trust
+                .query(doc.workspace_root(), TrustQuery::Git)
+                .is_trusted();
+            if self.diff_providers.get_vcs_dir(&path, trust_full).as_deref() != Some(vcs_dir) {
+                continue;
+            }
+            match self.diff_providers.get_diff_base(&path, trust_full) {
+                Some(diff_base) => doc.set_diff_base(diff_base),
+                None => doc.clear_diff_base(),
+            }
+            doc.set_version_control_head(
+                self.diff_providers.get_current_head_name(&path, trust_full),
+            );
+        }
+    }
+
     pub fn close_document(&mut self, doc_id: DocumentId, force: bool) -> Result<(), CloseError> {
         let doc = match self.documents.get(&doc_id) {
             Some(doc) => doc,

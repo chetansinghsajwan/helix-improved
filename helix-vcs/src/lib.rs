@@ -18,6 +18,12 @@ pub use diff::{DiffHandle, Hunk};
 
 mod status;
 
+#[cfg(feature = "git")]
+mod watch;
+
+#[cfg(feature = "git")]
+pub use watch::GitWatcher;
+
 pub use status::FileChange;
 
 /// Contains all active diff providers. Diff providers are compiled in via features. Currently
@@ -59,6 +65,14 @@ impl DiffProviderRegistry {
                 }
             }
         })
+    }
+
+    /// Returns the directory holding the VCS state (`HEAD`, index, refs) for `file`, which is what
+    /// a watcher should observe to notice changes made outside the editor.
+    pub fn get_vcs_dir(&self, file: &Path, trust_full: bool) -> Option<PathBuf> {
+        self.providers
+            .iter()
+            .find_map(|provider| provider.get_vcs_dir(file, trust_full).ok())
     }
 
     /// Fire-and-forget changed file iteration. Runs everything in a background task. Keeps
@@ -107,6 +121,14 @@ enum DiffProvider {
 }
 
 impl DiffProvider {
+    fn get_vcs_dir(&self, file: &Path, trust_full: bool) -> Result<PathBuf> {
+        match self {
+            #[cfg(feature = "git")]
+            Self::Git => git::get_git_dir(file, trust_full),
+            Self::None => bail!("no diff provider"),
+        }
+    }
+
     fn get_diff_base(&self, file: &Path, trust_full: bool) -> Result<Vec<u8>> {
         match self {
             #[cfg(feature = "git")]
