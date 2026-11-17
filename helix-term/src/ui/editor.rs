@@ -923,7 +923,7 @@ impl EditorView {
             if doc.id() == current {
                 active = i;
             }
-            labels.push(tui_design::tabs::Label { title: titles[i].clone(), modified: doc.is_modified(), icon: Some(tui_design::icons::file(fname, false)) });
+            labels.push(tui_design::tabs::Label { title: titles[i].clone(), modified: doc.is_modified(), icon: Some(design.icons.file(fname, false)) });
         }
         let local = ratatui::layout::Rect::new(0, 0, viewport.width, 1);
         let mut buf = ratatui::buffer::Buffer::empty(local);
