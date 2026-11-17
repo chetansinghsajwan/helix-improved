@@ -92,6 +92,8 @@ fn lsp_location_to_location(
 struct SymbolInformationItem {
     location: Location,
     symbol: lsp::SymbolInformation,
+    /// The symbol it is inside, as an index into the same list (document symbols only).
+    parent: Option<usize>,
 }
 
 struct DiagnosticStyles {
@@ -318,13 +320,16 @@ fn diag_picker(
 pub fn symbol_picker(cx: &mut Context) {
     fn nested_to_flat(
         list: &mut Vec<SymbolInformationItem>,
+        parent: Option<usize>,
         file: &lsp::TextDocumentIdentifier,
         uri: &Uri,
         symbol: lsp::DocumentSymbol,
         offset_encoding: OffsetEncoding,
     ) {
+        let index = list.len();
         #[allow(deprecated)]
         list.push(SymbolInformationItem {
+            parent,
             symbol: lsp::SymbolInformation {
                 name: symbol.name,
                 kind: symbol.kind,
@@ -340,7 +345,7 @@ pub fn symbol_picker(cx: &mut Context) {
             },
         });
         for child in symbol.children.into_iter().flatten() {
-            nested_to_flat(list, file, uri, child, offset_encoding);
+            nested_to_flat(list, Some(index), file, uri, child, offset_encoding);
         }
     }
     let doc = doc!(cx.editor);
@@ -366,22 +371,34 @@ pub fn symbol_picker(cx: &mut Context) {
                 // lsp has two ways to represent symbols (flat/nested)
                 // convert the nested variant to flat, so that we have a homogeneous list
                 let symbols = match symbols {
-                    lsp::DocumentSymbolResponse::Flat(symbols) => symbols
-                        .into_iter()
-                        .map(|symbol| SymbolInformationItem {
-                            location: Location {
-                                uri: doc_uri.clone(),
-                                range: symbol.location.range,
-                                offset_encoding,
-                            },
-                            symbol,
-                        })
-                        .collect(),
+                    lsp::DocumentSymbolResponse::Flat(symbols) => {
+                        // A flat list names the container of each symbol: it sits inside the nearest earlier one with that name.
+                        let parents: Vec<Option<usize>> = (0..symbols.len())
+                            .map(|i| {
+                                let container = symbols[i].container_name.as_deref().filter(|c| !c.is_empty())?;
+                                (0..i).rev().find(|&j| symbols[j].name == container)
+                            })
+                            .collect();
+                        symbols
+                            .into_iter()
+                            .zip(parents)
+                            .map(|(symbol, parent)| SymbolInformationItem {
+                                location: Location {
+                                    uri: doc_uri.clone(),
+                                    range: symbol.location.range,
+                                    offset_encoding,
+                                },
+                                symbol,
+                                parent,
+                            })
+                            .collect()
+                    }
                     lsp::DocumentSymbolResponse::Nested(symbols) => {
                         let mut flat_symbols = Vec::new();
                         for symbol in symbols {
                             nested_to_flat(
                                 &mut flat_symbols,
+                                None,
                                 &doc_id,
                                 &doc_uri,
                                 symbol,
@@ -406,23 +423,34 @@ pub fn symbol_picker(cx: &mut Context) {
         let mut symbols = Vec::new();
         while let Some(response) = futures.next().await {
             match response {
-                Ok(mut items) => symbols.append(&mut items),
+                Ok(mut items) => {
+                    // Parents are indices into the list of their own server: shift them into the merged one.
+                    let base = symbols.len();
+                    for item in &mut items {
+                        item.parent = item.parent.map(|p| p + base);
+                    }
+                    symbols.append(&mut items)
+                }
                 Err(err) => log::error!("Error requesting document symbols: {err}"),
             }
         }
         let call = move |_editor: &mut Editor, compositor: &mut Compositor| {
-            // The shared picker: kind, name and container in aligned columns, jump on accept.
-            let rows: Vec<(String, String, String)> = symbols
-                .iter()
-                .map(|s| (display_symbol_kind(s.symbol.kind).to_string(), s.symbol.name.clone(), s.symbol.container_name.clone().unwrap_or_default()))
-                .collect();
-            let kind_w = rows.iter().map(|r| r.0.chars().count()).max().unwrap_or(0).max("Kind".len());
-            let name_w = rows.iter().map(|r| r.1.chars().count()).max().unwrap_or(0).max("Name".len());
-            let header = format!("{:<kind_w$}  {:<name_w$}  Container", "Kind", "Name");
-            let candidates: Vec<pick::Candidate> = rows
+            // The shared picker as a tree: symbols under the symbol they are inside, jump on accept.
+            let candidates: Vec<pick::Candidate> = symbols
                 .iter()
                 .enumerate()
-                .map(|(i, (k, n, c))| pick::Candidate::with_raw(format!("{k:<kind_w$}  {n:<name_w$}  {c}"), i.to_string()))
+                .map(|(i, s)| {
+                    let mut ancestors = Vec::new();
+                    let mut up = s.parent;
+                    while let Some(p) = up {
+                        let a = &symbols[p];
+                        ancestors.push(pick::Ancestor { id: p as u32, kind: Some(symbol_kind(a.symbol.kind)), label: a.symbol.name.clone(), order: a.location.range.start.line });
+                        up = a.parent;
+                    }
+                    ancestors.reverse();
+                    let hier = pick::Hier { id: i as u32, kind: Some(symbol_kind(s.symbol.kind)), order: s.location.range.start.line, ancestors };
+                    pick::Candidate::hier(s.symbol.name.clone(), i.to_string(), hier)
+                })
                 .collect();
             let opts = pick::PickerOptions {
                 mode: pick::Mode::Fuzzy,
@@ -443,7 +471,7 @@ pub fn symbol_picker(cx: &mut Context) {
                 },
             )
             .with_title("Symbols")
-            .with_header(vec![header]);
+            .with_tree(true);
             compositor.push(Box::new(picker))
         };
 
@@ -487,8 +515,22 @@ pub fn workspace_symbol_picker(cx: &mut Context) {
                 for symbol in symbols {
                     let Ok(uri) = Uri::try_from(&symbol.location.uri) else { continue };
                     let path = uri.as_path().map(|p| path::get_relative_path(p).to_string_lossy().into_owned()).unwrap_or_else(|| symbol.location.uri.to_string());
-                    let display = format!("{:<9} {}  {}  {}", display_symbol_kind(symbol.kind), symbol.name, symbol.container_name.as_deref().unwrap_or_default(), path);
-                    let item = SymbolInformationItem { location: Location { uri, range: symbol.location.range, offset_encoding }, symbol };
+                    let kind = symbol_kind(symbol.kind);
+                    let line = symbol.location.range.start.line;
+                    // Under its file, and under its container when the server names one. Headers shared by
+                    // several symbols merge, so their ids come from what they stand for.
+                    let header_id = |parts: &[&str]| -> u32 {
+                        use std::hash::{Hash, Hasher};
+                        let mut h = std::collections::hash_map::DefaultHasher::new();
+                        parts.hash(&mut h);
+                        0x8000_0000 | (h.finish() as u32 & 0x7fff_ffff)
+                    };
+                    let mut ancestors = vec![pick::Ancestor { id: header_id(&[&path]), kind: None, label: path.clone(), order: 0 }];
+                    if let Some(container) = symbol.container_name.as_deref().filter(|c| !c.is_empty()) {
+                        ancestors.push(pick::Ancestor { id: header_id(&[&path, container]), kind: Some(symbols_panel::Kind::Module), label: container.to_string(), order: 0 });
+                    }
+                    let name = symbol.name.clone();
+                    let item = SymbolInformationItem { location: Location { uri, range: symbol.location.range, offset_encoding }, symbol, parent: None };
                     // Held across the push, so a newer query (which sets `cancel` first) never sees a stale entry.
                     let mut list = results.lock().unwrap();
                     if cancel.load(Ordering::Relaxed) {
@@ -496,7 +538,8 @@ pub fn workspace_symbol_picker(cx: &mut Context) {
                     }
                     list.push(item);
                     let index = list.len() - 1;
-                    injector.push(pick::Candidate::with_raw(display, index.to_string()), |c, cols| cols[0] = c.display.as_str().into());
+                    let hier = pick::Hier { id: index as u32, kind: Some(kind), order: line, ancestors };
+                    injector.push(pick::Candidate::hier(name, index.to_string(), hier), |c, cols| cols[0] = c.display.as_str().into());
                 }
             });
         }
@@ -522,6 +565,7 @@ pub fn workspace_symbol_picker(cx: &mut Context) {
         },
     )
     .with_title("Workspace symbols")
+    .with_tree(true)
     .with_live(source);
     cx.push_layer(Box::new(picker));
 }
@@ -1472,32 +1516,33 @@ fn compute_inlay_hints_for_view(
 
 /// The symbols of the document as a tree, from the first language server that has them (what the symbol
 /// explorer shows). `None` when no server can.
-pub fn document_symbol_tree(doc: &Document) -> Option<impl Future<Output = anyhow::Result<Vec<symbols_panel::Symbol>>>> {
-    use symbols_panel::{Kind, Symbol};
-
-    fn kind(k: lsp::SymbolKind) -> Kind {
-        match k {
-            lsp::SymbolKind::MODULE | lsp::SymbolKind::NAMESPACE | lsp::SymbolKind::PACKAGE | lsp::SymbolKind::FILE => Kind::Module,
-            lsp::SymbolKind::CLASS => Kind::Class,
-            lsp::SymbolKind::STRUCT => Kind::Struct,
-            lsp::SymbolKind::INTERFACE => Kind::Interface,
-            lsp::SymbolKind::ENUM | lsp::SymbolKind::ENUM_MEMBER => Kind::Enum,
-            lsp::SymbolKind::FUNCTION => Kind::Function,
-            lsp::SymbolKind::METHOD => Kind::Method,
-            lsp::SymbolKind::CONSTRUCTOR => Kind::Constructor,
-            lsp::SymbolKind::FIELD | lsp::SymbolKind::PROPERTY => Kind::Field,
-            lsp::SymbolKind::VARIABLE => Kind::Variable,
-            lsp::SymbolKind::CONSTANT => Kind::Constant,
-            lsp::SymbolKind::TYPE_PARAMETER => Kind::TypeParameter,
-            _ => Kind::Other,
-        }
+/// The symbol kinds that look different, from the language server's.
+fn symbol_kind(k: lsp::SymbolKind) -> symbols_panel::Kind {
+    match k {
+        lsp::SymbolKind::MODULE | lsp::SymbolKind::NAMESPACE | lsp::SymbolKind::PACKAGE | lsp::SymbolKind::FILE => symbols_panel::Kind::Module,
+        lsp::SymbolKind::CLASS => symbols_panel::Kind::Class,
+        lsp::SymbolKind::STRUCT => symbols_panel::Kind::Struct,
+        lsp::SymbolKind::INTERFACE => symbols_panel::Kind::Interface,
+        lsp::SymbolKind::ENUM | lsp::SymbolKind::ENUM_MEMBER => symbols_panel::Kind::Enum,
+        lsp::SymbolKind::FUNCTION => symbols_panel::Kind::Function,
+        lsp::SymbolKind::METHOD => symbols_panel::Kind::Method,
+        lsp::SymbolKind::CONSTRUCTOR => symbols_panel::Kind::Constructor,
+        lsp::SymbolKind::FIELD | lsp::SymbolKind::PROPERTY => symbols_panel::Kind::Field,
+        lsp::SymbolKind::VARIABLE => symbols_panel::Kind::Variable,
+        lsp::SymbolKind::CONSTANT => symbols_panel::Kind::Constant,
+        lsp::SymbolKind::TYPE_PARAMETER => symbols_panel::Kind::TypeParameter,
+        _ => symbols_panel::Kind::Other,
     }
+}
+
+pub fn document_symbol_tree(doc: &Document) -> Option<impl Future<Output = anyhow::Result<Vec<symbols_panel::Symbol>>>> {
+    use symbols_panel::Symbol;
 
     fn nested(s: lsp::DocumentSymbol) -> Symbol {
         Symbol {
             name: s.name,
             detail: s.detail.unwrap_or_default(),
-            kind: kind(s.kind),
+            kind: symbol_kind(s.kind),
             line: s.selection_range.start.line,
             col: s.selection_range.start.character,
             end_line: s.range.end.line,
@@ -1537,7 +1582,7 @@ pub fn document_symbol_tree(doc: &Document) -> Option<impl Future<Output = anyho
                 let flat: Vec<(Option<String>, Symbol)> = list
                     .into_iter()
                     .map(|s| {
-                        let sym = Symbol { name: s.name, detail: String::new(), kind: kind(s.kind), line: s.location.range.start.line, col: s.location.range.start.character, end_line: s.location.range.end.line, children: Vec::new() };
+                        let sym = Symbol { name: s.name, detail: String::new(), kind: symbol_kind(s.kind), line: s.location.range.start.line, col: s.location.range.start.character, end_line: s.location.range.end.line, children: Vec::new() };
                         (s.container_name.filter(|c| !c.is_empty()), sym)
                     })
                     .collect();
