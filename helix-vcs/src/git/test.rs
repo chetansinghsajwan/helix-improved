@@ -156,3 +156,24 @@ fn symlink_to_git_repo() {
     assert_eq!(git::get_diff_base(&file_link, true).unwrap(), contents);
     assert_eq!(git::get_diff_base(&file, true).unwrap(), contents);
 }
+
+/// A file inside a submodule (its `.git` is a gitfile) must still resolve its diff base.
+#[test]
+fn file_in_submodule() {
+    let sub = empty_git_repo();
+    let file = sub.path().join("file.txt");
+    File::create(&file).unwrap().write_all(b"foo").unwrap();
+    create_commit(sub.path(), true);
+
+    let outer = empty_git_repo();
+    exec_git_cmd(
+        &format!("-c protocol.file.allow=always submodule add {} sub", sub.path().display()),
+        outer.path(),
+    );
+    let inner = outer.path().join("sub/file.txt");
+    File::create(&inner).unwrap().write_all(b"bar").unwrap();
+
+    assert_eq!(git::get_diff_base(&inner, true).unwrap(), b"foo".to_vec());
+    // Untrusted workspaces ignore the submodule's repository-local `core.worktree`.
+    assert_eq!(git::get_diff_base(&inner, false).unwrap(), b"foo".to_vec());
+}

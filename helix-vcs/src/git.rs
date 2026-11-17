@@ -35,11 +35,12 @@ pub fn get_diff_base(file: &Path, trust_full: bool) -> Result<Vec<u8>> {
     // TODO cache repository lookup
 
     let repo_dir = get_repo_dir(&file)?;
-    let repo = open_repo(repo_dir, trust_full)
-        .context("failed to open git repo")?
-        .to_thread_local();
+    let (repo, work_dir) =
+        open_repo_with_workdir(repo_dir, trust_full).context("failed to open git repo")?;
+    let repo = repo.to_thread_local();
     let head = repo.head_commit()?;
-    let file_oid = find_file_in_commit(&repo, &head, &file)?;
+    let work_dir = repo.workdir().map(Path::to_path_buf).or(work_dir);
+    let file_oid = find_file_in_commit(&head, work_dir.as_deref(), &file)?;
 
     let file_object = repo.find_object(file_oid)?;
     let data = file_object.detach().data;
@@ -63,6 +64,16 @@ pub fn get_diff_base(file: &Path, trust_full: bool) -> Result<Vec<u8>> {
     } else {
         Ok(data)
     }
+}
+
+/// Returns the git directory that holds the repository state (`HEAD`, index, refs) for `file`.
+/// For a submodule this is its gitdir under the superproject's `.git/modules`.
+pub fn get_git_dir(file: &Path, trust_full: bool) -> Result<std::path::PathBuf> {
+    let file = gix::path::realpath(file).context("resolve symlinks")?;
+    let repo = open_repo(get_repo_dir(&file)?, trust_full)
+        .context("failed to open git repo")?
+        .to_thread_local();
+    Ok(repo.git_dir().to_path_buf())
 }
 
 pub fn get_current_head_name(file: &Path, trust_full: bool) -> Result<Arc<ArcSwap<Box<str>>>> {
@@ -94,6 +105,18 @@ pub fn for_each_changed_file(
 }
 
 fn open_repo(path: &Path, trust_full: bool) -> Result<ThreadSafeRepository> {
+    open_repo_with_workdir(path, trust_full).map(|(repo, _)| repo)
+}
+
+/// Like [`open_repo`], also returning the worktree directory found during discovery.
+///
+/// A submodule keeps its worktree location in `core.worktree` of its own repository-local
+/// config, which `Trust::Reduced` ignores, so `repo.workdir()` is `None` there. The discovered
+/// directory comes from the `.git` file instead of config, so callers use it to locate files.
+fn open_repo_with_workdir(
+    path: &Path,
+    trust_full: bool,
+) -> Result<(ThreadSafeRepository, Option<std::path::PathBuf>)> {
     // `trust_full` is the workspace-trust decision made by the caller, and it must be the
     // authority on the gix trust level. gix's own discovery (`discover_*`) ignores a
     // caller-supplied trust level: it always re-derives trust from `.git` ownership, so a malicious
@@ -132,7 +155,7 @@ fn open_repo(path: &Path, trust_full: bool) -> Result<ThreadSafeRepository> {
     };
     let (repo_path, _trust_from_ownership) = gix::discover::upwards_opts(path, discover_options)
         .context("failed to discover git repo")?;
-    let (git_dir, _work_dir) = repo_path.into_repository_and_work_tree_directories();
+    let (git_dir, work_dir) = repo_path.into_repository_and_work_tree_directories();
 
     let options = gix::open::Options::default()
         .permissions(permissions)
@@ -141,7 +164,7 @@ fn open_repo(path: &Path, trust_full: bool) -> Result<ThreadSafeRepository> {
         .open_path_as_is(true)
         .with(trust);
 
-    Ok(ThreadSafeRepository::open_opts(git_dir, options)?)
+    Ok((ThreadSafeRepository::open_opts(git_dir, options)?, work_dir))
 }
 
 /// Emulates the result of running `git status` from the command line.
@@ -220,8 +243,8 @@ fn status(repo: &Repository, f: impl Fn(Result<FileChange>) -> bool) -> Result<(
 }
 
 /// Finds the object that contains the contents of a file at a specific commit.
-fn find_file_in_commit(repo: &Repository, commit: &Commit, file: &Path) -> Result<ObjectId> {
-    let repo_dir = repo.workdir().context("repo has no worktree")?;
+fn find_file_in_commit(commit: &Commit, work_dir: Option<&Path>, file: &Path) -> Result<ObjectId> {
+    let repo_dir = work_dir.context("repo has no worktree")?;
     let rel_path = file.strip_prefix(repo_dir)?;
     let tree = commit.tree()?;
     let tree_entry = tree
