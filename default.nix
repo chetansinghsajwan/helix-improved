@@ -12,6 +12,8 @@
     helix,
     helix-unwrapped,
     src,
+    # A tuikit checkout to use instead of the git dependency (null: the locked git revision).
+    tuikitSrc ? null,
 }:
 let
     # `src` is the repo; tuikit comes in as a git dependency of helix-term (locked in Cargo.lock).
@@ -24,12 +26,27 @@ let
         rm -rf $out/grammars $out/queries
     '';
 
+    tuikitCrates = ["diagnostics-panel" "files" "git-core" "git-panel" "pick" "pv" "symbols-panel" "tb" "ui"];
+
     commonArgs = {
         pname = "helix-unwrapped";
         inherit (helix-unwrapped) version;
         inherit src;
         cargoLock = ./Cargo.lock;
         strictDeps = true;
+
+        # Points the tuikit git dependency at the given checkout with a cargo `[patch]`. It is added
+        # to the unpacked source, so the source stays a plain path (no build needed to evaluate).
+        # The lockfile still names the git revision, so the build runs without `--locked` and cargo
+        # re-resolves the patched crates.
+        postPatch = lib.optionalString (tuikitSrc != null) ''
+            mkdir -p .cargo
+            cat >> .cargo/config.toml <<'EOF'
+
+            [patch."https://github.com/chetansinghsajwan/tuikit"]
+            ${lib.concatMapStringsSep "\n" (c: "tuikit-${c} = { path = \"${tuikitSrc}/crates/${c}\" }") tuikitCrates}
+            EOF
+        '';
 
         # Only the editor binary. The workspace's own tests are upstream's and
         # slow; `pick`, `pv`, `git-core` and `ui` are tested in tuikit.

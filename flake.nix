@@ -1,6 +1,6 @@
 # helix-improved: our helix fork, built with crane. The shared toolkit (tuikit) is a git dependency
-# of helix-term; a build that has its own tuikit checkout (dotfiles) patches it in, see
-# pkgs/flake.nix there.
+# of helix-term; a parent repo with its own tuikit checkout (dotfiles) passes it as `tuikitSrc`
+# through `lib.helixFrom`.
 {
     inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -64,25 +64,24 @@
                         && !(lib.hasSuffix "runtime/grammars/sources" rel);
                 };
 
-            # The editor from a given source tree, so a parent repo can build it from its own copy
-            # (dotfiles patches in its local tuikit).
+            # The editor, optionally built against a tuikit checkout (a path) instead of the git
+            # dependency, so a parent repo (dotfiles) builds both from one tree.
             helixFrom =
-                pkgs: src:
+                pkgs: { tuikitSrc ? null }:
                 pkgs.callPackage ./default.nix {
                     craneLib = crane.mkLib pkgs;
-                    inherit src;
+                    src = sourceOf pkgs.lib;
+                    inherit tuikitSrc;
                 };
         in
         {
-            lib = {
-                inherit sourceOf helixFrom;
-            };
+            lib = { inherit helixFrom; };
 
             packages = forEachSystem (
                 sys:
                 let
                     pkgs = nixpkgs.legacyPackages.${sys};
-                    helix = helixFrom pkgs (sourceOf pkgs.lib);
+                    helix = helixFrom pkgs { };
                 in
                 {
                     inherit helix;
