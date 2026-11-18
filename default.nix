@@ -1,4 +1,4 @@
-# helix-improved: our helix fork with the shared toolkit (the tuikit submodule).
+# helix-improved: our helix fork with the shared toolkit (tuikit, a git dependency).
 #
 # The unwrapped editor is built here. The runtime directory (queries plus the
 # tree-sitter grammars built by Nix) comes from nixpkgs' own `helix` wrapper,
@@ -14,8 +14,7 @@
     src,
 }:
 let
-    # `src` is the repo with `tuikit/crates` in it: helix-term has path dependencies on
-    # `../tuikit/crates/{pick,ui,...}` that must resolve inside the build directory.
+    # `src` is the repo; tuikit comes in as a git dependency of helix-term (locked in Cargo.lock).
     helixSrc = src;
 
     # What helix falls back to when HELIX_RUNTIME is unset: themes, languages

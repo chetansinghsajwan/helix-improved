@@ -1,5 +1,6 @@
-# helix-improved: our helix fork, built with crane. The shared toolkit comes from the `tuikit`
-# submodule (path dependencies in helix-term), so clone with `--recurse-submodules`.
+# helix-improved: our helix fork, built with crane. The shared toolkit (tuikit) is a git dependency
+# of helix-term; a build that has its own tuikit checkout (dotfiles) patches it in, see
+# pkgs/flake.nix there.
 {
     inputs = {
         nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -28,7 +29,6 @@
                         path: _:
                         let
                             rel = lib.removePrefix "${toString ./.}/" (toString path);
-                            inTuikit = rel == "tuikit" || rel == "tuikit/Cargo.toml" || rel == "tuikit/crates" || lib.hasPrefix "tuikit/crates/" rel;
                         in
                         (
                             rel == (toString ./.)
@@ -59,21 +59,30 @@
                                 "theme.toml"
                                 "base16_theme.toml"
                             ]
-                            || inTuikit
                         )
                         && baseNameOf path != "target"
                         && !(lib.hasSuffix "runtime/grammars/sources" rel);
                 };
+
+            # The editor from a given source tree, so a parent repo can build it from its own copy
+            # (dotfiles patches in its local tuikit).
+            helixFrom =
+                pkgs: src:
+                pkgs.callPackage ./default.nix {
+                    craneLib = crane.mkLib pkgs;
+                    inherit src;
+                };
         in
         {
+            lib = {
+                inherit sourceOf helixFrom;
+            };
+
             packages = forEachSystem (
                 sys:
                 let
                     pkgs = nixpkgs.legacyPackages.${sys};
-                    helix = pkgs.callPackage ./default.nix {
-                        craneLib = crane.mkLib pkgs;
-                        src = sourceOf pkgs.lib;
-                    };
+                    helix = helixFrom pkgs (sourceOf pkgs.lib);
                 in
                 {
                     inherit helix;

@@ -58,14 +58,14 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "io-util", "io-std
 tui = { path = "../helix-tui", package = "helix-tui", default-features = false, features = ["crossterm"] }
 
 # Shared terminal toolkit (tuikit): picker, preview, design tokens, git.
-pick = { path = "../tuikit/crates/pick", package = "tuikit-pick", default-features = false }
-pv = { path = "../tuikit/crates/pv", package = "tuikit-pv" }
-tb = { path = "../tuikit/crates/tb", package = "tuikit-tb" }
-files = { path = "../tuikit/crates/files", package = "tuikit-files" }
-git-panel = { path = "../tuikit/crates/git-panel", package = "tuikit-git-panel" }
-diagnostics-panel = { path = "../tuikit/crates/diagnostics-panel", package = "tuikit-diagnostics-panel" }
-symbols-panel = { path = "../tuikit/crates/symbols-panel", package = "tuikit-symbols-panel" }
-tui-design = { path = "../tuikit/crates/ui", package = "tuikit-ui" }
+pick = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-pick", default-features = false }
+pv = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-pv" }
+tb = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-tb" }
+files = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-files" }
+git-panel = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-git-panel" }
+diagnostics-panel = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-diagnostics-panel" }
+symbols-panel = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-symbols-panel" }
+tui-design = { git = "https://github.com/chetansinghsajwan/tuikit", package = "tuikit-ui" }
 ratatui = "0.30"
 crossterm = { version = "0.28", features = ["event-stream"] }
 signal-hook = "0.4"
