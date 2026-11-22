@@ -35,19 +35,6 @@ let
         cargoLock = ./Cargo.lock;
         strictDeps = true;
 
-        # Points the tuikit git dependency at the given checkout with a cargo `[patch]`. It is added
-        # to the unpacked source, so the source stays a plain path (no build needed to evaluate).
-        # The lockfile still names the git revision, so the build runs without `--locked` and cargo
-        # re-resolves the patched crates.
-        postPatch = lib.optionalString (tuikitSrc != null) ''
-            mkdir -p .cargo
-            cat >> .cargo/config.toml <<'EOF'
-
-            [patch."https://github.com/chetansinghsajwan/tuikit"]
-            ${lib.concatMapStringsSep "\n" (c: "tuikit-${c} = { path = \"${tuikitSrc}/crates/${c}\" }") tuikitCrates}
-            EOF
-        '';
-
         # Only the editor binary. The workspace's own tests are upstream's and
         # slow; `pick`, `pv`, `git-core` and `ui` are tested in tuikit.
         cargoExtraArgs = "--package helix-term";
@@ -65,6 +52,22 @@ let
         };
     };
 
+    # Points the tuikit git dependency at the given checkout with a cargo `[patch]`. It is added
+    # to the unpacked source, so the source stays a plain path (no build needed to evaluate).
+    # The lockfile still names the git revision, so the build runs without `--locked` and cargo
+    # re-resolves the patched crates. Only the editor build gets it, not `commonArgs`: the
+    # dependency build below must not change when tuikit does, or every dependency (tree-sitter,
+    # gix...) would compile again on each tuikit edit. It builds the locked tuikit revision, and
+    # the editor build recompiles just the patched tuikit crates and helix-term.
+    postPatch = lib.optionalString (tuikitSrc != null) ''
+        mkdir -p .cargo
+        cat >> .cargo/config.toml <<'EOF'
+
+        [patch."https://github.com/chetansinghsajwan/tuikit"]
+        ${lib.concatMapStringsSep "\n" (c: "tuikit-${c} = { path = \"${tuikitSrc}/crates/${c}\" }") tuikitCrates}
+        EOF
+    '';
+
     # All dependencies, built once from the manifests alone: editing our own
     # code (helix, crates) does not rebuild them.
     cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -72,7 +75,7 @@ let
     unwrapped = craneLib.buildPackage (
         commonArgs
         // {
-            inherit cargoArtifacts;
+            inherit cargoArtifacts postPatch;
             env = commonArgs.env // {
                 HELIX_DEFAULT_RUNTIME = defaultRuntimeDir;
             };
