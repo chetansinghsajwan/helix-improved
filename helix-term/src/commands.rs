@@ -497,6 +497,7 @@ impl MappableCommand {
         toggle_minimap, "Show or hide the minimap",
         toggle_soft_wrap, "Wrap long lines (soft wrap) or not",
         toggle_dock_preview, "Show or hide the preview beside the files pane",
+        toggle_inline_diff, "Show or hide the lines git says were removed, in place (inline diff)",
         markdown_live, "Live mode: Markdown rendered except at the cursor, tables with aligned columns",
         markdown_source, "Source mode: the file as written",
         keys_help, "Show the keys of the current mode",
@@ -1039,6 +1040,11 @@ fn toggle_minimap(cx: &mut Context) {
 /// Show or hide the preview beside the files pane.
 fn toggle_dock_preview(cx: &mut Context) {
     run_typed(cx, "toggle dock-preview");
+}
+
+/// Show or hide the removed lines of the git diff in place (the `inline-diff` option).
+fn toggle_inline_diff(cx: &mut Context) {
+    run_typed(cx, "toggle inline-diff");
 }
 
 fn close_tab(cx: &mut Context) {

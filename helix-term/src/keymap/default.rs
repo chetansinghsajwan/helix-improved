@@ -339,6 +339,7 @@ pub fn default() -> HashMap<Mode, KeyTrie> {
             "M" => toggle_minimap,
             "W" => toggle_soft_wrap,
             "V" => toggle_dock_preview,
+            "I" => toggle_inline_diff,
             "T" => { "Table"
                 "l" => table_next_cell,
                 "h" => table_prev_cell,
