@@ -53,8 +53,13 @@ impl Decoration for InlineDiff {
             .collect();
         let viewport = renderer.viewport;
         let skip = renderer.offset.col;
+        // The rows are reserved in full, but the view may end inside them: draw only what is in the viewport.
+        let bottom = viewport.height + renderer.offset.row as u16;
         for (k, line) in lines.iter().enumerate() {
             let y = pos.visual_line + virt_off.row as u16 + k as u16;
+            if y >= bottom {
+                break;
+            }
             renderer.set_style(Rect::new(viewport.x, y, viewport.width, 1), self.style);
             let text: String = line.replace('\t', "    ").chars().skip(skip).collect();
             renderer.set_stringn(viewport.x, y, &text, viewport.width as usize, self.style);
