@@ -5636,7 +5636,7 @@ dependencies = [
 [[package]]
 name = "tuikit-diagnostics-panel"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "ratatui",
  "tuikit-ui",
@@ -5646,7 +5646,7 @@ dependencies = [
 [[package]]
 name = "tuikit-files"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "chrono",
  "ignore",
@@ -5664,7 +5664,7 @@ dependencies = [
 [[package]]
 name = "tuikit-git-core"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "gix 0.90.0",
 ]
@@ -5672,7 +5672,7 @@ dependencies = [
 [[package]]
 name = "tuikit-git-panel"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "ratatui",
  "tui-input",
@@ -5684,7 +5684,7 @@ dependencies = [
 [[package]]
 name = "tuikit-pick"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "grep",
  "ignore",
@@ -5699,7 +5699,7 @@ dependencies = [
 [[package]]
 name = "tuikit-pv"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "calamine",
  "csv",
@@ -5722,7 +5722,7 @@ dependencies = [
 [[package]]
 name = "tuikit-symbols-panel"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "ratatui",
  "tui-input",
@@ -5732,7 +5732,7 @@ dependencies = [
 [[package]]
 name = "tuikit-tb"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "ratatui",
  "tui-input",
@@ -5743,7 +5743,7 @@ dependencies = [
 [[package]]
 name = "tuikit-ui"
 version = "0.1.0"
-source = "git+https://github.com/chetansinghsajwan/tuikit#eb725467b930cc16e5fc2307460390b3380481f5"
+source = "git+https://github.com/chetansinghsajwan/tuikit#41f1de645dea99dff7e8dcbad4399ea89cfd14e9"
 dependencies = [
  "ignore",
  "notify",

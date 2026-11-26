@@ -43,15 +43,15 @@ impl Component for GitPanelComponent {
             return EventResult::Consumed(None);
         }
         match self.panel.handle_event(&ratatui::crossterm::event::Event::Key(ev)) {
-            git_panel::Action::Help => {
+            git_panel::Outcome::Help => {
                 self.help = Some(tui_design::keys::Help::default());
                 EventResult::Consumed(None)
             }
-            git_panel::Action::None | git_panel::Action::Changed | git_panel::Action::Palette | git_panel::Action::Command(_) => EventResult::Consumed(None),
-            git_panel::Action::Close => EventResult::Consumed(Some(Box::new(|compositor, _| {
+            git_panel::Outcome::None | git_panel::Outcome::Changed | git_panel::Outcome::Palette | git_panel::Outcome::Command(_) => EventResult::Consumed(None),
+            git_panel::Outcome::Close => EventResult::Consumed(Some(Box::new(|compositor, _| {
                 compositor.pop();
             }))),
-            git_panel::Action::Open(path) => EventResult::Consumed(Some(Box::new(move |compositor, cx| {
+            git_panel::Outcome::Open(path) => EventResult::Consumed(Some(Box::new(move |compositor, cx| {
                 compositor.pop();
                 if let Err(e) = cx.editor.open(&path, helix_view::editor::Action::Replace) {
                     cx.editor.set_error(format!("Failed to open {}: {e}", path.display()));
@@ -63,13 +63,13 @@ impl Component for GitPanelComponent {
     fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
         // A popup over the editor, sized by the shared `popup_percent` token.
         let full = RRect::new(area.x, area.y, area.width, area.height);
-        let p = tui_design::layout::popup(&self.theme, full);
+        let p = tui_design::layout::popup(&tui_design::Context::still(&self.theme), full);
         let popup = Rect::new(p.x, p.y, p.width, p.height);
         let r = RRect::new(0, 0, popup.width, popup.height);
         let mut buf = RBuffer::empty(r);
-        self.panel.render(r, &mut buf, &self.theme);
+        self.panel.render(r, &mut buf, &tui_design::Context::still(&self.theme));
         if let Some(help) = &mut self.help {
-            help.render(r, &mut buf, &self.theme, "Keys", &self.panel.keys_rows());
+            help.render(r, &mut buf, &tui_design::Context::still(&self.theme), "Keys", &self.panel.keys_rows());
         }
         copy(&buf, popup, surface);
     }

@@ -77,15 +77,14 @@ impl Component for MarkdownPreview {
 
     fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
         let full = RRect::new(area.x, area.y, area.width, area.height);
-        let p = tui_design::layout::popup(&self.theme, full);
+        let p = tui_design::layout::popup(&tui_design::Context::still(&self.theme), full);
         let popup = Rect::new(p.x, p.y, p.width, p.height);
         let r = RRect::new(0, 0, popup.width, popup.height);
         let mut buf = RBuffer::empty(r);
-        let pane = tui_design::Pane::new(&self.theme).title(&self.title).focused(true);
-        let inner = pane.inner(r);
-        pane.render(r, &mut buf);
+        let ui_cx = tui_design::Context::still(&self.theme);
+        let inner = tui_design::Pane::new().title(&self.title).focused(true).draw(&ui_cx, r, &mut buf);
         if self.width != inner.width {
-            let r = pv::markdown::render_in(&self.source, &self.theme, inner.width, self.base.as_deref());
+            let r = pv::markdown::render_in(&self.source, &tui_design::Context::still(&self.theme), inner.width, self.base.as_deref());
             self.lines = r.lines;
             self.headings = r.headings;
             self.width = inner.width;
@@ -138,11 +137,11 @@ impl Component for KeysHelp {
 
     fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
         let full = RRect::new(area.x, area.y, area.width, area.height);
-        let p = tui_design::layout::popup(&self.theme, full);
+        let p = tui_design::layout::popup(&tui_design::Context::still(&self.theme), full);
         let popup = Rect::new(p.x, p.y, p.width, p.height);
         let r = RRect::new(0, 0, popup.width, popup.height);
         let mut buf = RBuffer::empty(r);
-        self.help.render(r, &mut buf, &self.theme, &self.title, &self.rows);
+        self.help.render(r, &mut buf, &tui_design::Context::still(&self.theme), &self.title, &self.rows);
         copy(&buf, popup, surface);
     }
 
@@ -253,7 +252,7 @@ impl Component for ExportOptions {
     fn render(&mut self, area: Rect, surface: &mut Surface, _cx: &mut Context) {
         let full = RRect::new(area.x, area.y, area.width, area.height);
         let mut buf = RBuffer::empty(full);
-        self.multi.render(full, &mut buf, &self.theme);
+        self.multi.render(full, &mut buf, &tui_design::Context::still(&self.theme));
         copy(&buf, area, surface);
     }
 

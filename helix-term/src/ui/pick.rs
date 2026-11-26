@@ -108,11 +108,11 @@ impl Component for PickComponent {
         // cells replace what is underneath, and with the `transparent` token they
         // carry no background, so the terminal's own background shows.
         let full = RRect::new(area.x, area.y, area.width, area.height);
-        let p = tui_design::layout::popup(&self.theme, full);
+        let p = tui_design::layout::popup(&tui_design::Context::still(&self.theme), full);
         let popup = Rect::new(p.x, p.y, p.width, p.height);
         let r = RRect::new(0, 0, popup.width, popup.height);
         let mut buf = RBuffer::empty(r);
-        self.picker.render(r, &mut buf, &self.theme);
+        self.picker.render(r, &mut buf, &tui_design::Context::still(&self.theme));
         copy(&buf, popup, surface);
     }
 

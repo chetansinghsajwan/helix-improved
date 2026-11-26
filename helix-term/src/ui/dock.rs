@@ -55,7 +55,7 @@ pub enum PanelEvent {
 pub trait DockPanel {
     fn id(&self) -> &'static str;
     /// `editor` is there for panels that show editor state (diagnostics).
-    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, editor: &Editor);
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context, focused: bool, editor: &Editor);
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent;
     /// Whether typed text is expected (a prompt is open): then the leader key is a character, not the leader.
     fn is_typing(&self) -> bool {
@@ -74,7 +74,7 @@ pub trait DockPanel {
         None
     }
     /// The width the panel would like while it has the keyboard (a long name that does not fit).
-    fn wanted_width(&self, _theme: &tui_design::Theme) -> Option<u16> {
+    fn wanted_width(&self, _cx: &tui_design::Context) -> Option<u16> {
         None
     }
 }
@@ -86,10 +86,10 @@ impl DockPanel for FilesDock {
         "files"
     }
 
-    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
-        self.0.render(area, buf, theme, focused);
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context, focused: bool, _editor: &Editor) {
+        self.0.render(area, buf, cx, focused);
         if let Some(help) = &mut self.1 {
-            help.render(area, buf, theme, "Keys", &self.0.keys_rows());
+            help.render(area, buf, cx, "Keys", &self.0.keys_rows());
         }
     }
 
@@ -101,8 +101,8 @@ impl DockPanel for FilesDock {
         self.0.current().map(Path::to_path_buf)
     }
 
-    fn wanted_width(&self, theme: &tui_design::Theme) -> Option<u16> {
-        Some(self.0.wanted_width(theme))
+    fn wanted_width(&self, cx: &tui_design::Context) -> Option<u16> {
+        Some(self.0.wanted_width(cx))
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
@@ -113,12 +113,12 @@ impl DockPanel for FilesDock {
             return PanelEvent::None;
         }
         match self.0.handle_event(&ct::Event::Key(key)) {
-            files::Action::Open(p) => PanelEvent::Open(p),
-            files::Action::Close => PanelEvent::Unfocus,
-            files::Action::Created(p, d) => PanelEvent::Created(p, d),
-            files::Action::Moved(m) => PanelEvent::Moved(m),
-            files::Action::Deleted(d) => PanelEvent::Deleted(d),
-            files::Action::Help => {
+            files::Outcome::Open(p) => PanelEvent::Open(p),
+            files::Outcome::Close => PanelEvent::Unfocus,
+            files::Outcome::Created(p, d) => PanelEvent::Created(p, d),
+            files::Outcome::Moved(m) => PanelEvent::Moved(m),
+            files::Outcome::Deleted(d) => PanelEvent::Deleted(d),
+            files::Outcome::Help => {
                 self.1 = Some(tui_design::keys::Help::default());
                 PanelEvent::None
             }
@@ -143,10 +143,10 @@ impl DockPanel for GitDock {
         "git"
     }
 
-    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
-        self.0.render_compact(area, buf, theme, focused);
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context, focused: bool, _editor: &Editor) {
+        self.0.render_compact(area, buf, cx, focused);
         if let Some(help) = &mut self.1 {
-            help.render(area, buf, theme, "Keys", &self.0.keys_rows());
+            help.render(area, buf, cx, "Keys", &self.0.keys_rows());
         }
     }
 
@@ -166,21 +166,21 @@ impl DockPanel for GitDock {
             return PanelEvent::None;
         }
         match self.0.handle_event(&ct::Event::Key(key)) {
-            git_panel::Action::Open(p) => PanelEvent::Open(p),
-            git_panel::Action::Close => PanelEvent::Unfocus,
+            git_panel::Outcome::Open(p) => PanelEvent::Open(p),
+            git_panel::Outcome::Close => PanelEvent::Unfocus,
             // The palette, the help and the host commands are for hosts that draw them (the standalone tools).
-            git_panel::Action::Help => {
+            git_panel::Outcome::Help => {
                 self.1 = Some(tui_design::keys::Help::default());
                 PanelEvent::None
             }
-            git_panel::Action::Changed | git_panel::Action::None | git_panel::Action::Palette | git_panel::Action::Command(_) => PanelEvent::None,
+            git_panel::Outcome::Changed | git_panel::Outcome::None | git_panel::Outcome::Palette | git_panel::Outcome::Command(_) => PanelEvent::None,
         }
     }
 }
 
 /// The problems of the workspace (what the language servers reported), as a list
 /// grouped by file.
-struct DiagnosticsDock(diagnostics_panel::Panel);
+struct DiagnosticsDock(diagnostics_panel::Panel, Option<tui_design::keys::Help>);
 
 /// What the language servers reported, flattened for the panel.
 fn diagnostics_of(editor: &Editor) -> Vec<diagnostics_panel::Item> {
@@ -214,16 +214,33 @@ impl DockPanel for DiagnosticsDock {
         "diagnostics"
     }
 
-    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, editor: &Editor) {
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context, focused: bool, editor: &Editor) {
         self.0.set_items(diagnostics_of(editor));
-        self.0.render(area, buf, theme, focused);
+        self.0.render(area, buf, cx, focused);
+        if let Some(help) = &mut self.1 {
+            help.render(area, buf, cx, "Keys", &self.0.keys_rows());
+        }
+    }
+
+    fn is_typing(&self) -> bool {
+        self.1.is_some()
     }
 
     fn handle_key(&mut self, key: ct::KeyEvent) -> PanelEvent {
+        if let Some(help) = &mut self.1 {
+            if !help.key(&key) {
+                self.1 = None;
+            }
+            return PanelEvent::None;
+        }
         match self.0.handle_event(&ct::Event::Key(key)) {
             diagnostics_panel::Action::Open { path, line, col } => PanelEvent::OpenAt { path, line, col },
             diagnostics_panel::Action::Close => PanelEvent::Unfocus,
-            diagnostics_panel::Action::None => PanelEvent::None,
+            diagnostics_panel::Action::Help => {
+                self.1 = Some(tui_design::keys::Help::default());
+                PanelEvent::None
+            }
+            diagnostics_panel::Action::Palette | diagnostics_panel::Action::None => PanelEvent::None,
         }
     }
 }
@@ -231,7 +248,7 @@ impl DockPanel for DiagnosticsDock {
 fn make_panel(id: &str, root: &Path) -> Option<Box<dyn DockPanel>> {
     match id {
         "symbols" => Some(Box::new(SymbolsDock::default())),
-        "diagnostics" => Some(Box::new(DiagnosticsDock(diagnostics_panel::Panel::new(root)))),
+        "diagnostics" => Some(Box::new(DiagnosticsDock(diagnostics_panel::Panel::new(root, "space"), None))),
         "files" => Some(Box::new(FilesDock(files::Panel::new(root, files::PanelOptions::default()), None))),
         "git" => git_panel::Panel::new(root).map(|p| Box::new(GitDock(p, None)) as Box<dyn DockPanel>),
         _ => None,
@@ -283,11 +300,11 @@ impl Dock {
     }
 
     /// Tab labels over the top border when the dock holds several panels.
-    fn draw_tabs(&self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme) {
+    fn draw_tabs(&self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context) {
         if self.ids.len() < 2 || area.width < 6 {
             return;
         }
-        let c = &theme.colors;
+        let c = &cx.theme.colors;
         let mut x = area.x + 2;
         for (i, id) in self.ids.iter().enumerate() {
             let style = if i == self.active { RStyle::new().fg(c.accent.into()).add_modifier(Modifier::BOLD) } else { RStyle::new().fg(c.muted.into()) };
@@ -418,7 +435,7 @@ impl Docks {
                 return 0;
             }
             if dock.focused {
-                if let Some(want) = dock.active_panel(&root).and_then(|p| p.wanted_width(&theme)) {
+                if let Some(want) = dock.active_panel(&root).and_then(|p| p.wanted_width(&tui_design::Context::still(&theme))) {
                     return want.clamp(w, (w * 2).max(50));
                 }
             }
@@ -454,6 +471,8 @@ impl Docks {
     pub fn render(&mut self, wb: &tui_design::layout::Workbench, surface: &mut Surface, editor: &Editor) {
         self.follow(editor);
         let theme = self.theme().clone();
+        // The editor draws its own frames and runs no motion, so tuikit parts draw still.
+        let cx = tui_design::Context::still(&theme);
         let root = self.root.clone().unwrap_or_default();
         for (side, rect) in [(Side::Left, wb.left), (Side::Right, wb.right), (Side::Bottom, wb.bottom)] {
             let d = self.dock(side);
@@ -464,10 +483,10 @@ impl Docks {
             let local = RRect::new(0, 0, rect.width, rect.height);
             let mut buf = RBuffer::empty(local);
             match d.active_panel(&root) {
-                Some(panel) => panel.render(&mut buf, local, &theme, focused, editor),
+                Some(panel) => panel.render(&mut buf, local, &cx, focused, editor),
                 None => buf.set_string(1, 0, "unavailable here", RStyle::new().fg(theme.colors.muted.into())),
             }
-            d.draw_tabs(&mut buf, local, &theme);
+            d.draw_tabs(&mut buf, local, &cx);
             copy(&buf, from_ratatui(rect), surface);
         }
     }
@@ -526,7 +545,7 @@ pub fn draw_border(surface: &mut Surface, rect: Rect, theme: &tui_design::Theme,
     }
     let local = RRect::new(0, 0, rect.width, rect.height);
     let mut buf = RBuffer::empty(local);
-    tui_design::Pane::new(theme).focused(focused).render(local, &mut buf);
+    tui_design::Pane::new().focused(focused).draw(&tui_design::Context::still(theme), local, &mut buf);
     let (w, h) = (rect.width, rect.height);
     for y in 0..h {
         for x in 0..w {
@@ -549,7 +568,7 @@ pub fn draw_rule(surface: &mut Surface, rect: Rect, y: u16, theme: &tui_design::
     }
     let local = RRect::new(0, 0, rect.width, rect.height);
     let mut buf = RBuffer::empty(local);
-    tui_design::Pane::new(theme).focused(focused).render(local, &mut buf);
+    tui_design::Pane::new().focused(focused).draw(&tui_design::Context::still(theme), local, &mut buf);
     let fg = super::pick::color(buf[(0, 0)].fg);
     for x in rect.x..rect.right() {
         let sym = if x == rect.x { "├" } else if x == rect.right() - 1 { "┤" } else { "─" };
@@ -598,14 +617,13 @@ impl Docks {
         };
         let local = RRect::new(0, 0, area.width, area.height);
         let mut buf = RBuffer::empty(local);
-        let pane = tui_design::Pane::new(theme).focused(true);
-        let inner = pane.inner(local);
-        pane.render(local, &mut buf);
+        let cx = tui_design::Context::still(theme);
+        let inner = tui_design::Pane::new().focused(true).draw(&cx, local, &mut buf);
         if inner.width > 0 && inner.height > 0 {
             let key: PreviewKey = (path.clone(), inner.width, inner.height, pv::raw_tables());
             if self.preview.as_ref().map(|p| &p.0) != Some(&key) {
                 let opts = pv::Options { width: Some(inner.width), height: Some(inner.height), git: true, focus: None };
-                let lines = pv::preview(&path, theme, &opts).unwrap_or_else(|e| vec![ratatui::text::Line::from(ratatui::text::Span::styled(e.to_string(), RStyle::new().fg(theme.colors.muted.into())))]);
+                let lines = pv::preview(&path, &cx, &opts).unwrap_or_else(|e| vec![ratatui::text::Line::from(ratatui::text::Span::styled(e.to_string(), RStyle::new().fg(theme.colors.muted.into())))]);
                 self.preview = Some((key, lines));
             }
             if let Some((_, lines)) = &self.preview {
@@ -630,10 +648,10 @@ impl DockPanel for SymbolsDock {
         "symbols"
     }
 
-    fn render(&mut self, buf: &mut RBuffer, area: RRect, theme: &tui_design::Theme, focused: bool, _editor: &Editor) {
-        self.panel.render(area, buf, theme, focused);
+    fn render(&mut self, buf: &mut RBuffer, area: RRect, cx: &tui_design::Context, focused: bool, _editor: &Editor) {
+        self.panel.render(area, buf, cx, focused);
         if let Some(help) = &mut self.help {
-            help.render(area, buf, theme, "Keys", &self.panel.keys_rows());
+            help.render(area, buf, cx, "Keys", &self.panel.keys_rows());
         }
     }
 

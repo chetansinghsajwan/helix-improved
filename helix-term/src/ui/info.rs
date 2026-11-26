@@ -4,7 +4,6 @@ use helix_view::info::Info;
 use ratatui::buffer::Buffer as RBuffer;
 use ratatui::layout::Rect as RRect;
 use ratatui::style::Modifier as RModifier;
-use ratatui::widgets::Widget as RWidget;
 use tui::buffer::Buffer as Surface;
 use tui::text::Text;
 use tui::widgets::{Block, Paragraph, Widget};
@@ -42,7 +41,8 @@ impl Component for Info {
             let local = RRect::new(0, 0, area.width, area.height);
             let mut buf = RBuffer::empty(local);
             let title: &str = self.title.as_ref();
-            tui_design::Pane::new(theme).title(title).focused(true).render(local, &mut buf);
+            let ui_cx = tui_design::Context::still(theme);
+            tui_design::Pane::new().title(title).focused(true).draw(&ui_cx, local, &mut buf);
             let (w, h) = (area.width, area.height);
             for y in 0..h {
                 for x in 0..w {
