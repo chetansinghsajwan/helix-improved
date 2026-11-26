@@ -194,6 +194,17 @@ impl EditorView {
             }
         }
 
+        // The removed lines, in place, when `inline-diff` is on (the view reserved their rows).
+        if config.inline_diff {
+            let from = doc.text().char_to_line(view_offset.anchor.min(doc.text().len_chars()));
+            let removed = helix_view::annotations::inline_diff::removed_lines(doc, from, from + view.inner_height() + 1);
+            if !removed.is_empty() {
+                let minus = theme.get("diff.minus").fg.unwrap_or(Color::Red);
+                let style = Style::default().fg(minus).bg(super::minimap::fade(theme, minus));
+                decorations.add_decoration(text_decorations::InlineDiff::new(removed, style));
+            }
+        }
+
         if is_focused && config.cursorline {
             decorations.add_decoration(Self::cursorline(doc, view, theme));
         }

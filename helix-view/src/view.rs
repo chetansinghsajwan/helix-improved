@@ -538,6 +538,14 @@ impl View {
             }
         }
 
+        if doc.config.load().inline_diff {
+            let from = doc.text().char_to_line(doc.view_offset(self.id).anchor.min(doc.text().len_chars()));
+            let removed = crate::annotations::inline_diff::removed_lines(doc, from, from + self.inner_height() + 1);
+            if !removed.is_empty() {
+                text_annotations.add_line_annotation(Box::new(crate::annotations::inline_diff::InlineDiff::new(&removed)));
+            }
+        }
+
         let width = self.inner_width(doc);
         let enable_cursor_line = self
             .diagnostics_handler

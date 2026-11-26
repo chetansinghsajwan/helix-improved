@@ -387,6 +387,9 @@ pub struct Config {
     pub bufferline: BufferLine,
     /// A zoomed-out overview of the file along the right edge of every view. Defaults to `true`.
     pub minimap: bool,
+    /// Show the lines git says were removed, in place, as virtual lines above what replaced them.
+    /// Defaults to `false`.
+    pub inline_diff: bool,
     /// Its width in columns (each column is two dots wide). Defaults to `10`.
     pub minimap_width: u16,
     /// Pin the scopes (functions, classes) around the first visible line to the top of the view.
@@ -1268,6 +1271,7 @@ impl Default for Config {
             whitespace: WhitespaceConfig::default(),
             bufferline: BufferLine::default(),
             minimap: true,
+            inline_diff: false,
             minimap_width: 10,
             sticky_context: StickyContextConfig::default(),
             dock_preview: true,
